@@ -2,6 +2,7 @@
 
 const { EventEmitter } = require('events');
 const log = require('./logger');
+const sharp = require('sharp');
 
 // Button ID constants (match existing stopwatch remote protocol)
 const BUTTON_PLAY = 10;
@@ -27,6 +28,9 @@ const COLOR_BLUE = [0, 80, 200];
 const COLOR_WHITE = [180, 180, 180];
 const COLOR_CYAN = [0, 150, 150];
 
+// Stream Deck original button size
+const ICON_SIZE = 72;
+
 class StreamDeckManager extends EventEmitter {
   constructor() {
     super();
@@ -38,6 +42,7 @@ class StreamDeckManager extends EventEmitter {
     this.cols = 5;
     this.remoteId = 'streamdeck';
     this.lastFlags = 0;
+    this.lastPresetTime = 0; // Track last preset time selected
     this._listStreamDecks = null;
     this._openStreamDeck = null;
   }
@@ -88,6 +93,8 @@ class StreamDeckManager extends EventEmitter {
         keys.push({ index: i, type: 'preset', label: layout.presets[i].label, seconds: layout.presets[i].seconds });
       } else if (layout.controls[i]) {
         keys.push({ index: i, type: 'control', label: layout.controls[i].label });
+      } else if (layout.display[i]) {
+        keys.push({ index: i, type: 'display', label: layout.display[i].label });
       } else {
         keys.push({ index: i, type: 'empty', label: '' });
       }
@@ -131,7 +138,7 @@ class StreamDeckManager extends EventEmitter {
       });
 
       // Set initial button colors
-      this._setInitialColors();
+      await this._setInitialColors();
     } catch (err) {
       log.error('StreamDeck', `Failed to open: ${err.message}`);
       this.device = null;
@@ -179,6 +186,7 @@ class StreamDeckManager extends EventEmitter {
     const presetAction = layout.presets[keyIndex];
     if (presetAction) {
       log.info('StreamDeck', `Preset: ${presetAction.label} (key ${keyIndex})`);
+      this.lastPresetTime = presetAction.seconds; // Track preset selection
       this.emit('set-time', {
         remoteId: this.remoteId,
         seconds: presetAction.seconds,
@@ -193,6 +201,7 @@ class StreamDeckManager extends EventEmitter {
     // Build key mappings based on device size
     const controls = {};
     const presets = {};
+    const display = {};
 
     if (this.keyCount <= 6) {
       // 6-key Mini: row 0 = presets (3), row 1 = controls (3)
@@ -203,7 +212,7 @@ class StreamDeckManager extends EventEmitter {
       controls[4] = { buttonId: BUTTON_PAUSE, label: 'PAUSE' };
       controls[5] = { buttonId: BUTTON_STOP, label: 'STOP' };
     } else {
-      // 15-key (standard) or larger: row 0 = presets, row 2 = controls
+      // 15-key (standard) or larger: row 0 = presets, row 1 = display, row 2 = controls
       const c = this.cols;
 
       // Row 0: presets
@@ -211,6 +220,11 @@ class StreamDeckManager extends EventEmitter {
         const mins = PRESETS[i] / 60;
         presets[i] = { seconds: PRESETS[i], label: `${mins}:00` };
       }
+
+      // Row 1 (middle): timer display - center 3 buttons (6, 7, 8)
+      display[6] = { label: 'PRESET' };
+      display[7] = { label: 'MINS' };
+      display[8] = { label: 'SECS' };
 
       // Row 2 (bottom): controls
       const row2 = 2 * c;
@@ -220,10 +234,10 @@ class StreamDeckManager extends EventEmitter {
       controls[row2 + 3] = { buttonId: BUTTON_TOGGLE, label: 'TOGGLE' };
     }
 
-    return { controls, presets };
+    return { controls, presets, display };
   }
 
-  updateTimerDisplay(time, flags) {
+  async updateTimerDisplay(time, flags) {
     if (!this.connected || !this.device) return;
     this.lastFlags = flags;
 
@@ -254,12 +268,32 @@ class StreamDeckManager extends EventEmitter {
       const key = parseInt(keyStr, 10);
       this._fillKey(key, presetColor);
     }
+
+    // Update display buttons (6, 7, 8) with timer text
+    if (this.keyCount >= 15) {
+      const mins = Math.floor(time / 60);
+      const secs = time % 60;
+      const presetMins = Math.floor(this.lastPresetTime / 60);
+
+      try {
+        // Button 6: Preset time
+        await this._fillKeyWithText(6, `${presetMins}:00`, COLOR_BLUE);
+
+        // Button 7: Current minutes
+        await this._fillKeyWithText(7, mins.toString().padStart(2, '0'), controlColor);
+
+        // Button 8: Current seconds
+        await this._fillKeyWithText(8, secs.toString().padStart(2, '0'), controlColor);
+      } catch (err) {
+        log.debug('StreamDeck', `Text render error: ${err.message}`);
+      }
+    }
   }
 
-  _setInitialColors() {
+  async _setInitialColors() {
     if (!this.device) return;
 
-    // All keys gray initially
+    // All keys black initially
     for (let i = 0; i < this.keyCount; i++) {
       this._fillKey(i, COLOR_OFF);
     }
@@ -272,6 +306,17 @@ class StreamDeckManager extends EventEmitter {
     for (const keyStr of Object.keys(layout.presets)) {
       this._fillKey(parseInt(keyStr, 10), COLOR_CYAN);
     }
+
+    // Initialize display buttons with labels
+    if (this.keyCount >= 15) {
+      try {
+        await this._fillKeyWithText(6, 'PRESET', COLOR_GRAY);
+        await this._fillKeyWithText(7, '--', COLOR_GRAY);
+        await this._fillKeyWithText(8, '--', COLOR_GRAY);
+      } catch (err) {
+        log.debug('StreamDeck', `Initial text render error: ${err.message}`);
+      }
+    }
   }
 
   _fillKey(keyIndex, [r, g, b]) {
@@ -280,6 +325,42 @@ class StreamDeckManager extends EventEmitter {
       this.device.fillKeyColor(keyIndex, r, g, b);
     } catch (err) {
       log.debug('StreamDeck', `fillKeyColor error: ${err.message}`);
+    }
+  }
+
+  async _fillKeyWithText(keyIndex, text, [r, g, b]) {
+    if (!this.device || keyIndex >= this.keyCount) return;
+
+    try {
+      // Create a simple SVG with text
+      const svg = `
+        <svg width="${ICON_SIZE}" height="${ICON_SIZE}">
+          <rect width="${ICON_SIZE}" height="${ICON_SIZE}" fill="rgb(${r},${g},${b})"/>
+          <text
+            x="50%"
+            y="50%"
+            text-anchor="middle"
+            dominant-baseline="middle"
+            font-family="Arial, sans-serif"
+            font-size="20"
+            font-weight="bold"
+            fill="white"
+          >${text}</text>
+        </svg>
+      `;
+
+      // Convert SVG to raw RGBA buffer
+      const imageBuffer = await sharp(Buffer.from(svg))
+        .resize(ICON_SIZE, ICON_SIZE)
+        .raw()
+        .toBuffer();
+
+      // Send to Stream Deck
+      await this.device.fillKeyBuffer(keyIndex, imageBuffer, { format: 'rgba' });
+    } catch (err) {
+      log.debug('StreamDeck', `fillKeyWithText error for key ${keyIndex}: ${err.message}`);
+      // Fallback to solid color if text rendering fails
+      this._fillKey(keyIndex, [r, g, b]);
     }
   }
 
