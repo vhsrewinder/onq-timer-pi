@@ -13,6 +13,9 @@ class OnqClient extends EventEmitter {
     this.gatewayId = config.getGatewayId();
     this.socket = null;
     this.connected = false;
+    this._heartbeatInterval = null;
+    this._connectedDeviceCount = 0;
+    this._startTime = Date.now();
     this.stats = {
       buttonsSent: 0,
       presetsSent: 0,
@@ -26,6 +29,7 @@ class OnqClient extends EventEmitter {
   }
 
   stop() {
+    this._stopHeartbeat();
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
@@ -59,10 +63,15 @@ class OnqClient extends EventEmitter {
         participantId: this.gatewayId,
         appType: 'gateway-display',
       });
+
+      // Register as a gateway in OnQ so we appear in Settings → Gateways
+      this._registerGateway();
+      this._startHeartbeat();
     });
 
     this.socket.on('disconnect', (reason) => {
       this.connected = false;
+      this._stopHeartbeat();
       log.warn('OnqClient', `Socket.IO disconnected: ${reason}`);
       this.emit('disconnected');
     });
@@ -148,6 +157,64 @@ class OnqClient extends EventEmitter {
     log.info('OnqClient', `Server URL updated to ${host}:${port}, reconnecting...`);
     this.stop();
     this.start();
+  }
+
+  setConnectedDeviceCount(count) {
+    this._connectedDeviceCount = count;
+  }
+
+  async _registerGateway() {
+    const url = `${this._getBaseUrl()}/api/gateways/register`;
+    const body = {
+      gatewayId: this.gatewayId,
+    };
+
+    try {
+      const res = await this._postWithRetry(url, body);
+      if (res.ok) {
+        log.info('OnqClient', `Gateway registered: ${this.gatewayId}`);
+      } else {
+        const text = await res.text();
+        log.warn('OnqClient', `Gateway registration failed (${res.status}): ${text}`);
+      }
+    } catch (err) {
+      log.error('OnqClient', `Gateway registration error: ${err.message}`);
+    }
+  }
+
+  _startHeartbeat() {
+    this._stopHeartbeat();
+    this._heartbeatInterval = setInterval(() => this._sendHeartbeat(), 30000);
+  }
+
+  _stopHeartbeat() {
+    if (this._heartbeatInterval) {
+      clearInterval(this._heartbeatInterval);
+      this._heartbeatInterval = null;
+    }
+  }
+
+  async _sendHeartbeat() {
+    const url = `${this._getBaseUrl()}/api/gateways/heartbeat`;
+    const body = {
+      gatewayId: this.gatewayId,
+      uptime: Math.floor((Date.now() - this._startTime) / 1000),
+      connectedNodes: this._connectedDeviceCount,
+    };
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        log.debug('OnqClient', `Heartbeat rejected (${res.status})`);
+      }
+    } catch (err) {
+      log.debug('OnqClient', `Heartbeat failed: ${err.message}`);
+    }
   }
 
   getStatus() {

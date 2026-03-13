@@ -30,6 +30,14 @@ serialManager.on('set-time', (data) => {
   onqClient.postPreset(data.remoteId, data.seconds);
 });
 
+// Wire: device count changes → OnQ heartbeat
+serialManager.on('device-added', () => {
+  onqClient.setConnectedDeviceCount(serialManager.getDevices().length);
+});
+serialManager.on('device-removed', () => {
+  onqClient.setConnectedDeviceCount(serialManager.getDevices().length);
+});
+
 // Start all subsystems
 serialManager.start();
 onqClient.start();
