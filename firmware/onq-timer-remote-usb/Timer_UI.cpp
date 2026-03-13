@@ -165,12 +165,17 @@ void TimerUI::init() {
 // Helper function to determine connection quality based on RSSI
 ConnectionState getConnectionState() {
     // Determine connection quality based on RSSI and connection status
+    #if COMMUNICATION_MODE == COMM_MODE_USB_SERIAL
+    if (!g_usbSerial.isConnected()) {
+        return CONN_DISCONNECTED;
+    }
+    int8_t rssi = g_usbSerial.getLastRSSI();
+    #else
     if (!g_espnow.isConnected()) {
         return CONN_DISCONNECTED;  // Not connected
     }
-
-    // Get RSSI from ESP-NOW driver
     int8_t rssi = g_espnow.getLastRSSI();
+    #endif
 
     // Classify connection quality based on signal strength
     if (rssi >= RSSI_STRONG_THRESHOLD) {
@@ -1181,7 +1186,11 @@ void TimerUI::updateInfoSection() {
         if (m_bridgeLabel != nullptr) {
             if (m_bridgeConnected) {
                 // Connected - show RSSI value
+                #if COMMUNICATION_MODE == COMM_MODE_USB_SERIAL
+                int8_t rssi = g_usbSerial.getLastRSSI();
+                #else
                 int8_t rssi = g_espnow.getLastRSSI();
+                #endif
                 static int8_t lastRssi = 0;  // Cache last RSSI (v2.9.2 optimization)
                 if (rssi != lastRssi) {  // Only update label if RSSI changed
                     lastRssi = rssi;
