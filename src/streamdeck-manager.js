@@ -115,8 +115,8 @@ class StreamDeckManager extends EventEmitter {
       this.device = await this._openStreamDeck(devicePath);
       this.connected = true;
       this.model = this.device.MODEL;
-      this.keyCount = this.device.NUM_KEYS;
-      this.cols = this.device.KEY_COLUMNS;
+      this.keyCount = this.device.NUM_KEYS || this.device.KEY_COUNT || 15;
+      this.cols = this.device.KEY_COLUMNS || this.device.ICON_SIZE || 5;
 
       log.info('StreamDeck', `Connected: ${this.model} (${this.keyCount} keys)`);
       this.emit('connected', { model: this.model, keyCount: this.keyCount });
