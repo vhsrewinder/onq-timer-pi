@@ -259,14 +259,16 @@ class StreamDeckManager extends EventEmitter {
     // Update control buttons with state color
     for (const keyStr of Object.keys(layout.controls)) {
       const key = parseInt(keyStr, 10);
-      this._fillKey(key, controlColor);
+      const ctrl = layout.controls[key];
+      await this._fillKeyWithText(key, ctrl.label, controlColor);
     }
 
     // Presets always cyan when connected, gray otherwise
     const presetColor = flags & FLAG_CONNECTED ? COLOR_CYAN : COLOR_GRAY;
     for (const keyStr of Object.keys(layout.presets)) {
       const key = parseInt(keyStr, 10);
-      this._fillKey(key, presetColor);
+      const preset = layout.presets[key];
+      await this._fillKeyWithText(key, preset.label, presetColor);
     }
 
     // Update display buttons (6, 7, 8) with timer text
