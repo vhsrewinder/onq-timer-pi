@@ -1,13 +1,21 @@
 #include "Timer_UI.h"
 #include "montserrat_96.h"  // Custom 96pt font for timer display
+#if COMMUNICATION_MODE == COMM_MODE_USB_SERIAL
+#include "USBSerial_Driver.h"
+#else
 #include "ESPNOW_Driver.h"  // For sending volume/timer commands
+#endif
 #include "Display_SPD2010.h"  // For Set_Backlight()
 #include "Button_Driver.h"  // For checking button state during reset hold
 // #include "Gyro_QMI8658.h"  // For accelerometer/gyroscope data (motion detection & rotation) - REMOVED: Gyroscope removed in v2.7.0
 #include <math.h>
 
 // External references
+#if COMMUNICATION_MODE == COMM_MODE_USB_SERIAL
+extern USBSerialDriver g_usbSerial;
+#else
 extern ESPNOWDriver g_espnow;  // Global ESP-NOW instance
+#endif
 extern ButtonDriver g_buttons;  // Global button driver instance
 
 // Global instance
@@ -1735,8 +1743,12 @@ void TimerUI::onPresetSelected(uint16_t seconds) {
         // Now update the display (after main screen is loaded)
         update(m_offlineSeconds, 0);
     } else {
-        // BRIDGE MODE: Send SET_TIMER command to React app via ESP-NOW
+        // BRIDGE MODE: Send SET_TIMER command to server
+        #if COMMUNICATION_MODE == COMM_MODE_USB_SERIAL
+        g_usbSerial.sendSetTimer(seconds);
+        #else
         g_espnow.sendSetTimer(seconds);
+        #endif
 
         // Return to main screen
         hidePresets();
@@ -2017,9 +2029,13 @@ void TimerUI::adjustSetting(int8_t direction) {
         m_systemVolume = (uint8_t)newValue;
         lv_slider_set_value(m_settingsVolumeSlider, newValue, LV_ANIM_ON);
 
-        // Send to React app via ESP-NOW (only in bridge mode)
+        // Send to server (only in bridge mode)
         if (!m_offlineMode) {
+            #if COMMUNICATION_MODE == COMM_MODE_USB_SERIAL
+            g_usbSerial.sendSetVolume(m_systemVolume);
+            #else
             g_espnow.sendSetVolume(m_systemVolume);
+            #endif
         }
 
         // Save to NVS for persistence across reboots

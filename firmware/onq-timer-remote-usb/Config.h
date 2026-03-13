@@ -406,27 +406,50 @@ enum ConnectionState {
 
 // When using USB serial mode, ALL debug macros must use printf (UART)
 // instead of Serial, because Serial is reserved for JSON protocol.
+//
+// Serial.print() accepts any type (uint8_t, int, const char*, String).
+// printf() requires a format string. We use _dbgPrint() overloads to
+// bridge the gap so existing DEBUG_*_PRINT(value) calls compile.
 #if COMMUNICATION_MODE == COMM_MODE_USB_SERIAL
 
+  inline void _dbgPrint(const char* s)     { printf("%s", s); }
+  inline void _dbgPrint(char c)            { printf("%c", c); }
+  inline void _dbgPrint(uint8_t v)         { printf("%u", v); }
+  inline void _dbgPrint(int v)             { printf("%d", v); }
+  inline void _dbgPrint(unsigned int v)    { printf("%u", v); }
+  inline void _dbgPrint(long v)            { printf("%ld", v); }
+  inline void _dbgPrint(unsigned long v)   { printf("%lu", v); }
+  inline void _dbgPrint(float v)           { printf("%.2f", v); }
+  inline void _dbgPrint(double v)          { printf("%.2f", v); }
+
+  // Single-arg: route through _dbgPrint overloads
+  // Multi-arg (format string + args): route through printf directly
+  #define _DBG_PRINT_1(x)      _dbgPrint(x)
+  #define _DBG_PRINT_N(...)    printf(__VA_ARGS__)
+  #define _DBG_SELECT(_1, _2, _3, _4, _5, _6, _7, _8, NAME, ...) NAME
+  #define _DBG_PRINT(...) _DBG_SELECT(__VA_ARGS__, \
+      _DBG_PRINT_N, _DBG_PRINT_N, _DBG_PRINT_N, _DBG_PRINT_N, \
+      _DBG_PRINT_N, _DBG_PRINT_N, _DBG_PRINT_N, _DBG_PRINT_1)(__VA_ARGS__)
+
   #ifdef DEBUG_BUTTONS
-    #define DEBUG_BTN_PRINT(...) printf(__VA_ARGS__)
-    #define DEBUG_BTN_PRINTLN(...) printf(__VA_ARGS__); printf("\n")
+    #define DEBUG_BTN_PRINT(...)  _DBG_PRINT(__VA_ARGS__)
+    #define DEBUG_BTN_PRINTLN(...) do { _DBG_PRINT(__VA_ARGS__); printf("\n"); } while(0)
   #else
     #define DEBUG_BTN_PRINT(...)
     #define DEBUG_BTN_PRINTLN(...)
   #endif
 
   #ifdef DEBUG_POWER
-    #define DEBUG_PWR_PRINT(...) printf(__VA_ARGS__)
-    #define DEBUG_PWR_PRINTLN(...) printf(__VA_ARGS__); printf("\n")
+    #define DEBUG_PWR_PRINT(...)  _DBG_PRINT(__VA_ARGS__)
+    #define DEBUG_PWR_PRINTLN(...) do { _DBG_PRINT(__VA_ARGS__); printf("\n"); } while(0)
   #else
     #define DEBUG_PWR_PRINT(...)
     #define DEBUG_PWR_PRINTLN(...)
   #endif
 
   #ifdef DEBUG_UI
-    #define DEBUG_UI_PRINT(...) printf(__VA_ARGS__)
-    #define DEBUG_UI_PRINTLN(...) printf(__VA_ARGS__); printf("\n")
+    #define DEBUG_UI_PRINT(...)  _DBG_PRINT(__VA_ARGS__)
+    #define DEBUG_UI_PRINTLN(...) do { _DBG_PRINT(__VA_ARGS__); printf("\n"); } while(0)
   #else
     #define DEBUG_UI_PRINT(...)
     #define DEBUG_UI_PRINTLN(...)
