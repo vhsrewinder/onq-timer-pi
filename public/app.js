@@ -2,6 +2,7 @@
 
 // --- State ---
 let status = null;
+let sdTimerState = null; // track timer state for SD key colors
 
 // --- Init ---
 fetchStatus();
@@ -97,6 +98,10 @@ function handleSSE(msg) {
     case 'config-updated':
       fetchStatus();
       break;
+    case 'streamdeck-connected':
+    case 'streamdeck-disconnected':
+      fetchStatus();
+      break;
   }
 }
 
@@ -136,10 +141,69 @@ function renderStatus() {
     container.innerHTML = html;
   }
 
+  // Stream Deck
+  renderStreamDeck(status.streamDeck);
+
   // Timer
   if (status.timerState) {
     renderTimer(status.timerState);
   }
+}
+
+function renderStreamDeck(sd) {
+  const dot = document.getElementById('sd-status-dot');
+  const text = document.getElementById('sd-status-text');
+  const modelText = document.getElementById('sd-model-text');
+  const layoutContainer = document.getElementById('sd-layout');
+
+  if (!sd || !sd.connected) {
+    dot.className = 'status-dot red';
+    text.textContent = 'Not connected';
+    modelText.textContent = '';
+    layoutContainer.innerHTML = '<p class="empty">Plug in a Stream Deck to auto-detect</p>';
+    return;
+  }
+
+  dot.className = 'status-dot green';
+  text.textContent = 'Connected';
+  modelText.textContent = `(${sd.model}, ${sd.keyCount} keys)`;
+
+  // Render grid layout
+  if (sd.layout) {
+    renderStreamDeckGrid(layoutContainer, sd.layout, sd.cols || 5);
+  }
+}
+
+function renderStreamDeckGrid(container, layout, cols) {
+  const grid = document.createElement('div');
+  grid.className = 'sd-grid';
+  grid.style.gridTemplateColumns = `repeat(${cols}, 60px)`;
+
+  for (const key of layout.keys) {
+    const el = document.createElement('div');
+    el.className = `sd-key ${key.type}`;
+    el.textContent = key.label || '';
+
+    // Apply timer state colors to control keys
+    if (key.type === 'control' && sdTimerState) {
+      const cls = getTimerColorClass(sdTimerState);
+      if (cls) el.classList.add(cls);
+    }
+
+    grid.appendChild(el);
+  }
+
+  container.innerHTML = '';
+  container.appendChild(grid);
+}
+
+function getTimerColorClass(timerState) {
+  if (!timerState) return '';
+  const flags = timerState.flags || 0;
+  if (flags & 0x02) return 'expired';
+  if (flags & 0x01) return 'running';
+  if ((flags & 0x04) && timerState.time > 0) return 'paused';
+  return '';
 }
 
 function renderTimer(data) {
@@ -158,4 +222,13 @@ function renderTimer(data) {
   el.className = 'timer-display';
   if (isExpired) el.classList.add('expired');
   else if (!isRunning && !isConnected) el.classList.add('stopped');
+
+  // Save for SD grid color updates
+  sdTimerState = { time, flags };
+
+  // Re-render SD grid colors if connected
+  if (status && status.streamDeck && status.streamDeck.connected && status.streamDeck.layout) {
+    const layoutContainer = document.getElementById('sd-layout');
+    renderStreamDeckGrid(layoutContainer, status.streamDeck.layout, status.streamDeck.cols || 5);
+  }
 }

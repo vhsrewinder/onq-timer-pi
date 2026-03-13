@@ -7,11 +7,12 @@ const config = require('./config');
 const log = require('./logger');
 
 class WebUI {
-  constructor(port, serialManager, onqClient, timerRelay) {
+  constructor(port, serialManager, onqClient, timerRelay, streamDeckManager) {
     this.port = port;
     this.serialManager = serialManager;
     this.onqClient = onqClient;
     this.timerRelay = timerRelay;
+    this.streamDeckManager = streamDeckManager || null;
     this.app = express();
     this.server = null;
     this.sseClients = new Set();
@@ -29,8 +30,17 @@ class WebUI {
         devices: this.serialManager.getDevices(),
         onq: this.onqClient.getStatus(),
         timerState: this.timerRelay.getLastTimerState(),
+        streamDeck: this.streamDeckManager ? this.streamDeckManager.getStatus() : null,
         uptime: process.uptime(),
       });
+    });
+
+    // Stream Deck layout
+    this.app.get('/api/streamdeck', (req, res) => {
+      if (!this.streamDeckManager) {
+        return res.json({ available: false });
+      }
+      res.json({ available: true, ...this.streamDeckManager.getStatus() });
     });
 
     // Config
@@ -98,6 +108,15 @@ class WebUI {
     this.onqClient.on('timer-sync', (data) => {
       this._broadcastSSE('timer-sync', data);
     });
+
+    if (this.streamDeckManager) {
+      this.streamDeckManager.on('connected', (data) => {
+        this._broadcastSSE('streamdeck-connected', data);
+      });
+      this.streamDeckManager.on('disconnected', () => {
+        this._broadcastSSE('streamdeck-disconnected', {});
+      });
+    }
 
     this.server = this.app.listen(this.port, () => {
       log.info('WebUI', `Config UI at http://0.0.0.0:${this.port}`);

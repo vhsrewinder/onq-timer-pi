@@ -65,6 +65,14 @@ cat > /etc/onq-timer-pi/config.json <<EOF
 }
 EOF
 
+# Optional: Stream Deck udev rules
+read -rp "Install Stream Deck USB permissions? (y/N): " INSTALL_STREAMDECK
+if [ "$INSTALL_STREAMDECK" = "y" ] || [ "$INSTALL_STREAMDECK" = "Y" ]; then
+  echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", MODE="0666"' > /etc/udev/rules.d/50-elgato.rules
+  udevadm control --reload-rules && udevadm trigger
+  echo "Stream Deck udev rules installed"
+fi
+
 # Add user to dialout group (for serial access)
 if id -nG "$SUDO_USER" 2>/dev/null | grep -qw dialout; then
   echo "User $SUDO_USER already in dialout group"

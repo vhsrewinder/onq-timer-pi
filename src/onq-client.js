@@ -163,6 +163,10 @@ class OnqClient extends EventEmitter {
     this._connectedDeviceCount = count;
   }
 
+  setPeripheralStatus(peripherals) {
+    this._peripherals = peripherals;
+  }
+
   async _registerGateway() {
     const url = `${this._getBaseUrl()}/api/gateways/register`;
     const body = {
@@ -200,6 +204,7 @@ class OnqClient extends EventEmitter {
       gatewayId: this.gatewayId,
       uptime: Math.floor((Date.now() - this._startTime) / 1000),
       connectedNodes: this._connectedDeviceCount,
+      peripherals: this._peripherals || null,
     };
 
     try {

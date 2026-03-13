@@ -7,9 +7,10 @@ const FLAG_EXPIRED = 0x02;
 const FLAG_CONNECTED = 0x04;
 
 class TimerRelay {
-  constructor(serialManager, onqClient) {
+  constructor(serialManager, onqClient, streamDeckManager) {
     this.serialManager = serialManager;
     this.onqClient = onqClient;
+    this.streamDeckManager = streamDeckManager || null;
     this.timeSyncTimer = null;
     this.lastTimerState = null;
   }
@@ -48,6 +49,9 @@ class TimerRelay {
 
     this.lastTimerState = msg;
     this.serialManager.broadcastToAll(msg);
+    if (this.streamDeckManager) {
+      this.streamDeckManager.updateTimerDisplay(data.time, flags);
+    }
 
     log.debug('TimerRelay', `Forwarded timer: ${data.time}s, flags=0x${flags.toString(16).padStart(2, '0')}`);
   }
@@ -62,6 +66,9 @@ class TimerRelay {
 
     this.lastTimerState = msg;
     this.serialManager.broadcastToAll(msg);
+    if (this.streamDeckManager) {
+      this.streamDeckManager.updateTimerDisplay(0, 0);
+    }
     log.info('TimerRelay', 'OnQ disconnected, cleared stopwatch displays');
   }
 

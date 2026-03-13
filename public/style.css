@@ -101,4 +101,41 @@ pre.log-box {
   word-break: break-all;
 }
 
+/* Stream Deck */
+.sd-model { color: #888; font-size: 0.85rem; margin-left: 0.5rem; }
+
+.sd-grid-container { margin-top: 0.75rem; }
+
+.sd-grid {
+  display: inline-grid;
+  gap: 6px;
+  padding: 12px;
+  background: #0a0a1a;
+  border-radius: 12px;
+  border: 2px solid #2a2a4a;
+}
+
+.sd-key {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  line-height: 1.2;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.sd-key.preset { background: #009696; }
+.sd-key.control { background: #3c3c3c; }
+.sd-key.empty { background: #1a1a1a; border-color: #222; }
+
+.sd-key.control.running { background: #00b400; }
+.sd-key.control.paused { background: #c8b400; }
+.sd-key.control.expired { background: #c80000; }
+
 .empty { color: #666; font-style: italic; }
