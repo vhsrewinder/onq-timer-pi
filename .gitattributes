@@ -1,0 +1,14 @@
+# Force LF line endings for all text files
+* text=auto eol=lf
+
+# Shell scripts must be LF
+*.sh text eol=lf
+
+# Node.js / JS files
+*.js text eol=lf
+*.json text eol=lf
+
+# Firmware source (can be CRLF on Windows, but normalize in git)
+*.cpp text eol=lf
+*.h text eol=lf
+*.ino text eol=lf
