@@ -294,28 +294,36 @@ void ButtonDriver::enterDeepSleep() {
     printf("\n\n==========================================\n");
     printf("DEEP SLEEP ENTRY SEQUENCE STARTING\n");
     printf("==========================================\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("\n\n==========================================");
     Serial.println("DEEP SLEEP ENTRY SEQUENCE STARTING");
     Serial.println("==========================================");
     Serial.flush();  // CRITICAL: Flush serial buffer
+#endif
     delay(50);
 
     printf("[1/7] Preparing for deep sleep...\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[1/7] Preparing for deep sleep...");
     Serial.flush();
+#endif
     delay(50);
 
     // Turn off backlight
     printf("[2/7] Turning off backlight...\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[2/7] Turning off backlight...");
     Serial.flush();
+#endif
     Set_Backlight(BACKLIGHT_OFF);
     delay(100);
 
     // CRITICAL FIX: Wait for ALL buttons to be released before sleeping
     printf("[3/7] Waiting for button release...\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[3/7] Waiting for button release...");
     Serial.flush();
+#endif
 
     uint32_t waitStart = millis();
     bool allReleased = false;
@@ -331,7 +339,9 @@ void ButtonDriver::enterDeepSleep() {
             if (checkCount % 10 == 0) {  // Print every 100ms
                 printf("  Still waiting... (btn1=%d, btn2=%d, btn3=%d)\n",
                        digitalRead(BUTTON_1_PIN), digitalRead(BUTTON_2_PIN), digitalRead(BUTTON_3_PIN));
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
                 Serial.flush();
+#endif
             }
             delay(10);  // Wait 10ms and check again
         }
@@ -340,22 +350,28 @@ void ButtonDriver::enterDeepSleep() {
     if (!allReleased) {
         printf("[ERROR] Button release timeout after 8 seconds!\n");
         printf("[ERROR] Aborting deep sleep, turning screen back on...\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
         Serial.println("[ERROR] Button release timeout!");
         Serial.println("[ERROR] Aborting deep sleep!");
         Serial.flush();
+#endif
         Set_Backlight(BACKLIGHT_ACTIVE);  // Turn screen back on
         return;  // Don't enter sleep if buttons stuck
     }
 
     printf("[3/7] All buttons released (took %lu ms)\n", millis() - waitStart);
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[3/7] All buttons released!");
     Serial.flush();
+#endif
 
     // CRITICAL: Add extra settling time after button release
     // Hardware buttons can bounce or have slow pull-up rise times
     printf("[3/7] Waiting 300ms for button state to stabilize...\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[3/7] Stabilizing...");
     Serial.flush();
+#endif
     delay(300);  // Let button state fully settle
 
     // Verify buttons are STILL released after settling
@@ -364,25 +380,33 @@ void ButtonDriver::enterDeepSleep() {
     bool btn3State = digitalRead(BUTTON_3_PIN);
 
     printf("[3/7] Final verification: btn1=%d, btn2=%d, btn3=%d\n", btn1State, btn2State, btn3State);
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.flush();
+#endif
 
     if (btn1State == LOW || btn2State == LOW || btn3State == LOW) {
         printf("[ERROR] Button(s) still pressed after settling period!\n");
         printf("[ERROR] Cannot safely enter deep sleep. Aborting.\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
         Serial.println("[ERROR] Button still pressed!");
         Serial.flush();
+#endif
         Set_Backlight(BACKLIGHT_ACTIVE);
         return;
     }
 
     printf("[3/7] Button release confirmed and stable.\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.flush();
+#endif
     delay(50);
 
     // CRITICAL: Keep power latched during deep sleep
     printf("[4/7] Configuring power latch (GPIO 7)...\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[4/7] Configuring power latch...");
     Serial.flush();
+#endif
 
     rtc_gpio_init((gpio_num_t)7);  // Initialize as RTC GPIO
     rtc_gpio_set_direction((gpio_num_t)7, RTC_GPIO_MODE_OUTPUT_ONLY);
@@ -390,19 +414,22 @@ void ButtonDriver::enterDeepSleep() {
     rtc_gpio_hold_en((gpio_num_t)7);  // Hold the state
 
     printf("[4/7] Power latch held via RTC GPIO (GPIO 7 = HIGH)\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[4/7] Power latch configured!");
     Serial.flush();
+#endif
     delay(50);
 
     // Configure wake sources
     printf("[5/7] Configuring wake sources...\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[5/7] Configuring wake sources...");
     Serial.flush();
+#endif
 
     // CRITICAL: Configure button GPIOs as RTC GPIOs with pull-ups
     // This ensures they maintain HIGH state during deep sleep and don't float
     printf("[5/7] Configuring RTC GPIO pull-ups for buttons...\n");
-    Serial.flush();
 
     // Button 1 (GPIO 13)
     rtc_gpio_init((gpio_num_t)BUTTON_1_PIN);
@@ -411,7 +438,6 @@ void ButtonDriver::enterDeepSleep() {
     rtc_gpio_pulldown_dis((gpio_num_t)BUTTON_1_PIN);
     rtc_gpio_hold_en((gpio_num_t)BUTTON_1_PIN);
     printf("  Button 1 (GPIO %d): RTC pull-up enabled and held\n", BUTTON_1_PIN);
-    Serial.flush();
 
     // Button 2 (GPIO 12)
     rtc_gpio_init((gpio_num_t)BUTTON_2_PIN);
@@ -420,7 +446,6 @@ void ButtonDriver::enterDeepSleep() {
     rtc_gpio_pulldown_dis((gpio_num_t)BUTTON_2_PIN);
     rtc_gpio_hold_en((gpio_num_t)BUTTON_2_PIN);
     printf("  Button 2 (GPIO %d): RTC pull-up enabled and held\n", BUTTON_2_PIN);
-    Serial.flush();
 
     // Button 3 (GPIO 1)
     rtc_gpio_init((gpio_num_t)BUTTON_3_PIN);
@@ -429,10 +454,11 @@ void ButtonDriver::enterDeepSleep() {
     rtc_gpio_pulldown_dis((gpio_num_t)BUTTON_3_PIN);
     rtc_gpio_hold_en((gpio_num_t)BUTTON_3_PIN);
     printf("  Button 3 (GPIO %d): RTC pull-up enabled and held\n", BUTTON_3_PIN);
-    Serial.flush();
 
     printf("[5/7] All button GPIOs configured with RTC pull-ups\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.flush();
+#endif
     delay(50);
 
     // Use ONLY EXT1 (not EXT0) for better noise immunity
@@ -441,38 +467,48 @@ void ButtonDriver::enterDeepSleep() {
 
     printf("[5/7] Wake sources: EXT1 on GPIO %d, %d, %d (wake on ANY LOW)\n",
            BUTTON_1_PIN, BUTTON_2_PIN, BUTTON_3_PIN);
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[5/7] Wake sources configured!");
     Serial.flush();
+#endif
     delay(50);
 
     printf("[6/7] Final button state check before sleep:\n");
     printf("  Button 1 (GPIO %d): %s\n", BUTTON_1_PIN, digitalRead(BUTTON_1_PIN) == HIGH ? "HIGH (released)" : "LOW (pressed)");
     printf("  Button 2 (GPIO %d): %s\n", BUTTON_2_PIN, digitalRead(BUTTON_2_PIN) == HIGH ? "HIGH (released)" : "LOW (pressed)");
     printf("  Button 3 (GPIO %d): %s\n", BUTTON_3_PIN, digitalRead(BUTTON_3_PIN) == HIGH ? "HIGH (released)" : "LOW (pressed)");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[6/7] Final button check done!");
     Serial.flush();
+#endif
     delay(100);
 
     printf("\n[7/7] *** ENTERING DEEP SLEEP NOW ***\n");
     printf("Press any button to wake the device.\n");
     printf("==========================================\n\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("\n[7/7] *** ENTERING DEEP SLEEP NOW ***");
     Serial.println("Press any button to wake.");
     Serial.println("==========================================\n");
 
     // CRITICAL: Ensure ALL serial data is transmitted before sleep
     Serial.flush();
+#endif
     delay(200);  // Extra delay to ensure serial TX completes
 
     // CRITICAL: One final delay to let GPIO states fully stabilize
     // This prevents false wake from electrical noise or button bounce
     printf("[7/7] Waiting 500ms for final GPIO stabilization...\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.println("[7/7] Final stabilization delay...");
     Serial.flush();
+#endif
     delay(500);
 
     printf("[7/7] GPIO stable. Entering sleep in 3... 2... 1...\n");
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
     Serial.flush();
+#endif
     delay(100);
 
     // Enter deep sleep

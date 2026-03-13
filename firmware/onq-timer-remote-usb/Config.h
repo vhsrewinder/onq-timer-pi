@@ -412,6 +412,8 @@ enum ConnectionState {
 // bridge the gap so existing DEBUG_*_PRINT(value) calls compile.
 #if COMMUNICATION_MODE == COMM_MODE_USB_SERIAL
 
+  #include <cstdio>  // printf() for _dbgPrint overloads
+
   inline void _dbgPrint(const char* s)     { printf("%s", s); }
   inline void _dbgPrint(char c)            { printf("%c", c); }
   inline void _dbgPrint(uint8_t v)         { printf("%u", v); }

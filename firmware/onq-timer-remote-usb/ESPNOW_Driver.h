@@ -7,7 +7,6 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
-#include "Config.h"
 
 /*
  * Queue-Master Remote Control - ESP-NOW Communication Driver

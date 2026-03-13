@@ -235,8 +235,8 @@ void updateBrightnessManagement() {
 // Update radio sleep/wake cycles for power optimization
 void updateRadioSleepWake() {
 #if COMMUNICATION_MODE == COMM_MODE_USB_SERIAL
-  return;  // No radio in USB serial mode
-#endif
+  // No radio in USB serial mode — nothing to do
+#else
   uint32_t now = millis();
 
   // SCENARIO 1: OFFLINE MODE - Turn radio completely off for maximum power savings
@@ -285,6 +285,7 @@ void updateRadioSleepWake() {
       // Heartbeat/discover in main loop will handle periodic communication
     }
   }
+#endif // COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
 }
 
 // Reset activity timers on button press
