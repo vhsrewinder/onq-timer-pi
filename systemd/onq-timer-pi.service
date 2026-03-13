@@ -1,0 +1,17 @@
+[Unit]
+Description=OnQ Timer Pi Relay - USB Stopwatch to OnQ Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node src/index.js
+WorkingDirectory=/opt/onq-timer-pi
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+User=root
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,36 @@
+{
+  "project": {
+    "name": "Queue-Master Remote Control",
+    "description": "ESP32-S3 remote with audio alerts",
+    "version": "1.6.3"
+  },
+  "upload": {
+    "port": "COM6",
+    "baud_rate": 921600,
+    "data_directory": "C:\\Users\\lt08\\Documents\\queue-master-remote\\ESP32-S3-Touch-LCD-1.46-Demo\\Arduino\\examples\\LVGL_Arduino\\data",
+    "partition_name": "spiffs",
+    "board": "esp32s3"
+  },
+  "board_settings": {
+    "flash_mode": "qio",
+    "flash_frequency": "80m",
+    "flash_size": "16MB"
+  },
+  "ota": {
+    "enabled": false,
+    "ip_address": "192.168.1.100",
+    "port": 3232,
+    "password": ""
+  },
+  "development": {
+    "verbose": true,
+    "auto_detect_tools": true,
+    "backup_before_upload": false
+  },
+  "advanced": {
+    "partition_file": "",
+    "custom_mkspiffs_args": [],
+    "custom_esptool_args": [],
+    "timeout_seconds": 60
+  }
+}

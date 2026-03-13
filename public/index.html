@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OnQ Timer Pi Relay</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>OnQ Timer Pi Relay</h1>
+
+  <!-- Server Connection -->
+  <div class="card">
+    <h2>OnQ Server</h2>
+    <p>
+      <span id="onq-status-dot" class="status-dot red"></span>
+      <span id="onq-status-text">Disconnected</span>
+      &mdash; <span id="onq-server-url"></span>
+    </p>
+    <div class="form-row">
+      <input type="text" id="server-host" placeholder="192.168.45.40">
+      <input type="number" id="server-port" placeholder="3000" style="max-width:80px">
+      <button onclick="saveServer()">Save</button>
+    </div>
+  </div>
+
+  <!-- Connected Stopwatches -->
+  <div class="card">
+    <h2>Connected Stopwatches</h2>
+    <div id="devices-container">
+      <p class="empty">No devices connected</p>
+    </div>
+  </div>
+
+  <!-- Timer State -->
+  <div class="card">
+    <h2>Timer State</h2>
+    <div id="timer-display" class="timer-display stopped">--:--</div>
+  </div>
+
+  <!-- Service Controls -->
+  <div class="card">
+    <h2>Service</h2>
+    <div class="form-row">
+      <button onclick="loadLogs()">Refresh Logs</button>
+      <button class="danger" onclick="restartService()">Restart Service</button>
+    </div>
+    <pre id="log-box" class="log-box" style="margin-top:0.5rem">Click "Refresh Logs" to load</pre>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
