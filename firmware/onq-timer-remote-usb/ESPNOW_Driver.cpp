@@ -1,3 +1,6 @@
+#include "Config.h"
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
+
 #include "ESPNOW_Driver.h"
 #include "Timer_UI.h"  // For updating real-time clock
 
@@ -641,3 +644,5 @@ void ESPNOWDriver::updateConnectionState() {
         }
     }
 }
+
+#endif // COMMUNICATION_MODE != COMM_MODE_USB_SERIAL

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Config.h"
+#if COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
+
 #include <Arduino.h>
 #include <esp_now.h>
 #include <WiFi.h>
@@ -185,3 +188,5 @@ private:
 
 // Global instance
 extern ESPNOWDriver g_espnow;
+
+#endif // COMMUNICATION_MODE != COMM_MODE_USB_SERIAL
