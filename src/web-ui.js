@@ -124,15 +124,8 @@ class WebUI {
     });
 
     // Stream Deck button simulation
-    this.app.post('/api/streamdeck/simulate', (req, res) => {
-      if (!this.streamDeckManager || !this.streamDeckManager.connected) {
-        return res.status(400).json({
-          success: false,
-          error: 'Stream Deck not connected'
-        });
-      }
-
-      const { index, type } = req.body;
+    this.app.post('/api/streamdeck/simulate', async (req, res) => {
+      const { index, type, seconds } = req.body;
 
       if (index === undefined || type === undefined) {
         return res.status(400).json({
@@ -142,12 +135,49 @@ class WebUI {
       }
 
       try {
-        // Simulate button press by calling the internal handler
-        log.info('WebUI', `Simulating Stream Deck button press: index=${index}, type=${type}`);
-        this.streamDeckManager._handleKeyDown(index);
-        res.json({ success: true, index, type });
+        // If Stream Deck is connected, use it for simulation
+        if (this.streamDeckManager && this.streamDeckManager.connected) {
+          log.info('WebUI', `Simulating Stream Deck button press: index=${index}, type=${type}`);
+          this.streamDeckManager._handleKeyDown(index);
+          return res.json({ success: true, index, type, method: 'streamdeck' });
+        }
+
+        // Otherwise, send directly to OnQ based on button type
+        const remoteId = 251; // Touch interface remote ID
+
+        // Button IDs from streamdeck-manager.js
+        const BUTTON_PLAY = 10;
+        const BUTTON_PAUSE = 12;
+        const BUTTON_STOP = 14;
+        const BUTTON_RESET = 15;
+
+        log.info('WebUI', `Touch interface button: index=${index}, type=${type}`);
+
+        switch (type) {
+          case 'control':
+            // Dynamic control button - send PLAY for now
+            await this.onqClient.postButtonPress(remoteId, BUTTON_PLAY);
+            break;
+          case 'reset':
+            await this.onqClient.postButtonPress(remoteId, BUTTON_RESET);
+            break;
+          case 'preset':
+          case 'lastPreset':
+            if (seconds !== undefined) {
+              await this.onqClient.postSetTime(remoteId, seconds);
+            }
+            break;
+          case 'adjustment':
+            // Adjustments are handled in streamdeck-manager, skip for now
+            log.warn('WebUI', 'Adjustment buttons not yet supported in touch interface');
+            break;
+          default:
+            log.warn('WebUI', `Unknown button type: ${type}`);
+        }
+
+        res.json({ success: true, index, type, method: 'direct' });
       } catch (err) {
-        log.error('WebUI', `Stream Deck simulation failed: ${err.message}`);
+        log.error('WebUI', `Button simulation failed: ${err.message}`);
         res.status(500).json({ success: false, error: err.message });
       }
     });

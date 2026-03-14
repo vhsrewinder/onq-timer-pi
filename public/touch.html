@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>OnQ Timer - Touch Control</title>
+  <link rel="stylesheet" href="touch.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Timer Display -->
+    <div class="timer-section">
+      <div id="timer-display" class="timer-display">00:00</div>
+      <div id="timer-status" class="timer-status">STOPPED</div>
+    </div>
+
+    <!-- Stream Deck Grid -->
+    <div id="sd-grid" class="sd-grid">
+      <!-- Buttons will be dynamically generated here -->
+    </div>
+
+    <!-- Connection Status -->
+    <div id="connection-status" class="connection-status">
+      <span id="onq-status" class="status-indicator">OnQ: Disconnected</span>
+    </div>
+  </div>
+
+  <script src="touch.js"></script>
+</body>
+</html>
