@@ -10,7 +10,7 @@ const BUTTON_PAUSE = 12;
 const BUTTON_STOP = 14;
 const BUTTON_TOGGLE = 2;
 
-// Preset durations in seconds - reduced to 3 presets
+// Preset durations in seconds
 const PRESETS = [60, 120, 300]; // 1, 2, 5 min
 
 // Flag bits from timer-relay
@@ -222,7 +222,7 @@ class StreamDeckManager extends EventEmitter {
     log.info('StreamDeck', `Processing key press for index ${keyIndex}`);
     const layout = this._getLayout();
 
-    // Check control buttons
+    // Check control buttons (combined START/PAUSE/RESUME button)
     const controlAction = layout.controls[keyIndex];
     if (controlAction) {
       log.info('StreamDeck', `Control button: ${controlAction.label} (key ${keyIndex}, buttonId ${controlAction.buttonId})`);
@@ -299,35 +299,34 @@ class StreamDeckManager extends EventEmitter {
       presets[0] = { seconds: 60, label: '1:00' };
       presets[1] = { seconds: 120, label: '2:00' };
       presets[2] = { seconds: 300, label: '5:00' };
-      controls[3] = { buttonId: BUTTON_PLAY, label: 'PLAY' };
+      controls[3] = { buttonId: BUTTON_PLAY, label: 'START' };
       controls[4] = { buttonId: BUTTON_PAUSE, label: 'PAUSE' };
-      controls[5] = { buttonId: BUTTON_STOP, label: 'STOP' };
+      special[5] = { type: 'reset', label: 'RESET' };
     } else {
       // 15-key (standard) layout:
-      // Row 0 (0-4): [1:00] [2:00] [5:00] [LAST] [+10s]
-      // Row 1 (5-9): [-10s] [-5s] [+5s] [MINS] [SECS]
-      // Row 2 (10-14): [PLAY] [PAUSE/RES] [STOP] [RESET] [STATUS]
+      // Row 0 (0-4): [+5s] [+10s] [1:00] [2:00] [5:00]
+      // Row 1 (5-9): [-5s] [-10s] [LAST] [MINS] [SECS]
+      // Row 2 (10-14): [STATUS] [empty] [empty] [RESET] [START/PAUSE/RESUME]
 
-      // Row 0: Presets and +10s
-      presets[0] = { seconds: 60, label: '1:00' };
-      presets[1] = { seconds: 120, label: '2:00' };
-      presets[2] = { seconds: 300, label: '5:00' };
-      special[3] = { type: 'lastPreset', label: 'LAST' };
-      adjustments[4] = { adjust: 10, label: '+10s' };
+      // Row 0: Adjustments and presets
+      adjustments[0] = { adjust: 5, label: '+5s' };
+      adjustments[1] = { adjust: 10, label: '+10s' };
+      presets[2] = { seconds: 60, label: '1:00' };
+      presets[3] = { seconds: 120, label: '2:00' };
+      presets[4] = { seconds: 300, label: '5:00' };
 
-      // Row 1: Adjustments and display
-      adjustments[5] = { adjust: -10, label: '-10s' };
-      adjustments[6] = { adjust: -5, label: '-5s' };
-      adjustments[7] = { adjust: 5, label: '+5s' };
+      // Row 1: Adjustments, LAST, and display
+      adjustments[5] = { adjust: -5, label: '-5s' };
+      adjustments[6] = { adjust: -10, label: '-10s' };
+      special[7] = { type: 'lastPreset', label: 'LAST' };
       display[8] = { label: 'MINS' };
       display[9] = { label: 'SECS' };
 
-      // Row 2: Controls
-      controls[10] = { buttonId: BUTTON_PLAY, label: 'PLAY' };
-      controls[11] = { buttonId: BUTTON_PAUSE, label: 'PAUSE' }; // Will be updated dynamically
-      controls[12] = { buttonId: BUTTON_STOP, label: 'STOP' };
+      // Row 2: STATUS, RESET, and combined START/PAUSE/RESUME
+      special[10] = { type: 'status', label: 'STATUS' };
+      // 11 and 12 are empty
       special[13] = { type: 'reset', label: 'RESET' };
-      special[14] = { type: 'status', label: 'STATUS' };
+      controls[14] = { buttonId: BUTTON_PLAY, label: 'START' }; // Will be updated dynamically
     }
 
     return { controls, presets, display, adjustments, special };
@@ -343,6 +342,7 @@ class StreamDeckManager extends EventEmitter {
     const isExpired = (flags & FLAG_EXPIRED) !== 0;
     const isConnected = (flags & FLAG_CONNECTED) !== 0;
     const isPaused = isConnected && !isRunning && !isExpired && time > 0;
+    const isStopped = time === 0 && !isRunning;
 
     // Determine state color (traffic light)
     let stateColor;
@@ -364,16 +364,30 @@ class StreamDeckManager extends EventEmitter {
     const layout = this._getLayout();
 
     try {
-      // Update control buttons
+      // Update the combined START/PAUSE/RESUME button
       for (const keyStr of Object.keys(layout.controls)) {
         const key = parseInt(keyStr, 10);
         const ctrl = layout.controls[key];
 
-        // Change PAUSE button text based on state
-        let buttonLabel = ctrl.label;
-        if (ctrl.buttonId === BUTTON_PAUSE) {
-          buttonLabel = isPaused ? 'RESUME' : 'PAUSE';
+        // Determine button label and action based on state
+        let buttonLabel;
+        let buttonId;
+        if (isStopped) {
+          buttonLabel = 'START';
+          buttonId = BUTTON_PLAY;
+        } else if (isPaused) {
+          buttonLabel = 'RESUME';
+          buttonId = BUTTON_PLAY;
+        } else if (isRunning) {
+          buttonLabel = 'PAUSE';
+          buttonId = BUTTON_PAUSE;
+        } else {
+          buttonLabel = 'START';
+          buttonId = BUTTON_PLAY;
         }
+
+        // Update the layout for future button presses
+        layout.controls[key].buttonId = buttonId;
 
         await this._fillKeyWithText(key, buttonLabel, stateColor);
       }

@@ -331,6 +331,28 @@ function renderStreamDeckGrid(container, layout, cols) {
       });
     }
 
+    // Apply timer state colors to status key
+    if (key.type === 'status' && sdTimerState) {
+      const cls = getTimerColorClass(sdTimerState);
+      if (cls) el.classList.add(cls);
+      else el.classList.add('stopped'); // default to stopped
+    }
+
+    // Make clickable if it's an interactive button
+    if (['control', 'preset', 'adjustment', 'reset', 'lastPreset'].includes(key.type)) {
+      el.classList.add('clickable');
+      el.title = `Click to simulate ${key.type} button: ${key.label}`;
+
+      el.addEventListener('click', () => {
+        // Add visual feedback
+        el.classList.add('pressed');
+        setTimeout(() => el.classList.remove('pressed'), 150);
+
+        // Simulate the press
+        simulateStreamDeckPress(key);
+      });
+    }
+
     grid.appendChild(el);
   }
 
