@@ -46,6 +46,7 @@ class StreamDeckManager extends EventEmitter {
     this.lastFlags = 0;
     this.currentTime = 0; // Track current timer time for adjustments
     this.lastResetTime = 0; // Track time at moment of reset for LAST preset
+    this.currentControlButtonId = BUTTON_PLAY; // Track current control button action
     this._listStreamDecks = null;
     this._openStreamDeck = null;
     this.currentDevicePath = null; // Track current device path for reconnection detection
@@ -225,10 +226,10 @@ class StreamDeckManager extends EventEmitter {
     // Check control buttons (combined START/PAUSE/RESUME button)
     const controlAction = layout.controls[keyIndex];
     if (controlAction) {
-      log.info('StreamDeck', `Control button: ${controlAction.label} (key ${keyIndex}, buttonId ${controlAction.buttonId})`);
+      log.info('StreamDeck', `Control button: ${controlAction.label} (key ${keyIndex}, buttonId ${this.currentControlButtonId})`);
       this.emit('button-press', {
         remoteId: this.remoteId,
-        buttonId: controlAction.buttonId,
+        buttonId: this.currentControlButtonId,
       });
       return;
     }
@@ -386,8 +387,8 @@ class StreamDeckManager extends EventEmitter {
           buttonId = BUTTON_PLAY;
         }
 
-        // Update the layout for future button presses
-        layout.controls[key].buttonId = buttonId;
+        // Update the instance variable for future button presses
+        this.currentControlButtonId = buttonId;
 
         await this._fillKeyWithText(key, buttonLabel, stateColor);
       }
