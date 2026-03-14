@@ -8,6 +8,79 @@ let onqConnected = false;
 fetchStatus();
 connectSSE();
 setInterval(fetchStatus, 10000); // fallback poll
+initFullscreen();
+
+// --- Fullscreen Handling ---
+
+function initFullscreen() {
+  const btn = document.getElementById('fullscreen-btn');
+
+  // Check if Fullscreen API is available
+  const isFullscreenAvailable =
+    document.fullscreenEnabled ||
+    document.webkitFullscreenEnabled ||
+    document.mozFullScreenEnabled ||
+    document.msFullscreenEnabled;
+
+  if (!isFullscreenAvailable) {
+    btn.style.display = 'none';
+    return;
+  }
+
+  btn.addEventListener('click', toggleFullscreen);
+
+  // Listen for fullscreen changes to update button text
+  document.addEventListener('fullscreenchange', updateFullscreenButton);
+  document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+  document.addEventListener('mozfullscreenchange', updateFullscreenButton);
+  document.addEventListener('msfullscreenchange', updateFullscreenButton);
+}
+
+function toggleFullscreen() {
+  const elem = document.documentElement;
+
+  if (!isFullscreen()) {
+    // Enter fullscreen
+    if (elem.requestFullscreen) {
+      elem.requestFullscreen();
+    } else if (elem.webkitRequestFullscreen) {
+      elem.webkitRequestFullscreen();
+    } else if (elem.mozRequestFullScreen) {
+      elem.mozRequestFullScreen();
+    } else if (elem.msRequestFullscreen) {
+      elem.msRequestFullscreen();
+    }
+  } else {
+    // Exit fullscreen
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    } else if (document.mozCancelFullScreen) {
+      document.mozCancelFullScreen();
+    } else if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+    }
+  }
+}
+
+function isFullscreen() {
+  return !!(
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement
+  );
+}
+
+function updateFullscreenButton() {
+  const btn = document.getElementById('fullscreen-btn');
+  if (isFullscreen()) {
+    btn.textContent = 'Exit Fullscreen';
+  } else {
+    btn.textContent = 'Fullscreen';
+  }
+}
 
 // --- API calls ---
 
