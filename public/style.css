@@ -165,22 +165,45 @@ pre.log-box {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: #fff;
   text-align: center;
-  line-height: 1.2;
+  line-height: 1.1;
   border: 1px solid rgba(255,255,255,0.1);
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
+/* Button type colors */
 .sd-key.preset { background: #009696; }
 .sd-key.control { background: #3c3c3c; }
+.sd-key.adjustment { background: #960096; }
+.sd-key.lastPreset { background: #dc7800; }
+.sd-key.reset { background: #c80000; }
+.sd-key.status { background: #3c3c3c; }
+.sd-key.display { background: #1a1a1a; }
 .sd-key.empty { background: #1a1a1a; border-color: #222; }
 
+/* State-based colors for control buttons */
 .sd-key.control.running { background: #00b400; }
 .sd-key.control.paused { background: #c8b400; }
 .sd-key.control.expired { background: #c80000; }
+
+/* State-based colors for status button */
+.sd-key.status.running { background: #00b400; }
+.sd-key.status.paused { background: #c8b400; }
+.sd-key.status.expired { background: #c80000; }
+.sd-key.status.stopped { background: #3c3c3c; }
+
+/* Pulsate animation for paused state */
+@keyframes pulsate {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.sd-key.pulsating {
+  animation: pulsate 1.5s ease-in-out infinite;
+}
 
 /* Clickable Stream Deck keys */
 .sd-key.clickable {

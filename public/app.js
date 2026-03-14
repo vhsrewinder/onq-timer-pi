@@ -295,14 +295,29 @@ function renderStreamDeckGrid(container, layout, cols) {
     el.className = `sd-key ${key.type}`;
     el.textContent = key.label || '';
 
+    // Determine if paused
+    const isPaused = sdTimerState && (sdTimerState.flags & 0x04) && !(sdTimerState.flags & 0x01) && !(sdTimerState.flags & 0x02) && sdTimerState.time > 0;
+
     // Apply timer state colors to control keys
     if (key.type === 'control' && sdTimerState) {
       const cls = getTimerColorClass(sdTimerState);
       if (cls) el.classList.add(cls);
+
+      // Add pulsating animation to PAUSE/RESUME button when paused
+      if (isPaused && key.label && (key.label.includes('PAUSE') || key.label.includes('RESUME'))) {
+        el.classList.add('pulsating');
+      }
     }
 
-    // Make clickable if it's a control or preset button
-    if (key.type === 'control' || key.type === 'preset') {
+    // Apply timer state colors to status key
+    if (key.type === 'status' && sdTimerState) {
+      const cls = getTimerColorClass(sdTimerState);
+      if (cls) el.classList.add(cls);
+      else el.classList.add('stopped'); // default to stopped
+    }
+
+    // Make clickable if it's an interactive button
+    if (['control', 'preset', 'adjustment', 'reset', 'lastPreset'].includes(key.type)) {
       el.classList.add('clickable');
       el.title = `Click to simulate ${key.type} button: ${key.label}`;
 

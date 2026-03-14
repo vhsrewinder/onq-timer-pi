@@ -10,8 +10,8 @@ const BUTTON_PAUSE = 12;
 const BUTTON_STOP = 14;
 const BUTTON_TOGGLE = 2;
 
-// Preset durations in seconds
-const PRESETS = [180, 300, 600, 900, 1200]; // 3, 5, 10, 15, 20 min
+// Preset durations in seconds - reduced to 3 presets
+const PRESETS = [60, 120, 300]; // 1, 2, 5 min
 
 // Flag bits from timer-relay
 const FLAG_RUNNING = 0x01;
@@ -27,6 +27,8 @@ const COLOR_GRAY = [60, 60, 60];
 const COLOR_BLUE = [0, 80, 200];
 const COLOR_WHITE = [180, 180, 180];
 const COLOR_CYAN = [0, 150, 150];
+const COLOR_PURPLE = [150, 0, 150];
+const COLOR_ORANGE = [220, 120, 0];
 
 // Stream Deck original button size
 const ICON_SIZE = 72;
@@ -42,7 +44,8 @@ class StreamDeckManager extends EventEmitter {
     this.cols = 5;
     this.remoteId = 249; // Numeric remote ID for Stream Deck (must be <= 255)
     this.lastFlags = 0;
-    this.lastPresetTime = 0; // Track last preset time selected
+    this.currentTime = 0; // Track current timer time for adjustments
+    this.lastResetTime = 0; // Track time at moment of reset for LAST preset
     this._listStreamDecks = null;
     this._openStreamDeck = null;
     this.currentDevicePath = null; // Track current device path for reconnection detection
@@ -87,7 +90,6 @@ class StreamDeckManager extends EventEmitter {
     const layout = this._getLayout();
     const keys = [];
     const totalKeys = this.connected ? this.keyCount : (this.keyCount || 15);
-    const cols = this.connected ? this.cols : 5;
 
     for (let i = 0; i < totalKeys; i++) {
       if (layout.presets[i]) {
@@ -96,12 +98,16 @@ class StreamDeckManager extends EventEmitter {
         keys.push({ index: i, type: 'control', label: layout.controls[i].label });
       } else if (layout.display[i]) {
         keys.push({ index: i, type: 'display', label: layout.display[i].label });
+      } else if (layout.adjustments[i]) {
+        keys.push({ index: i, type: 'adjustment', label: layout.adjustments[i].label });
+      } else if (layout.special[i]) {
+        keys.push({ index: i, type: layout.special[i].type, label: layout.special[i].label });
       } else {
         keys.push({ index: i, type: 'empty', label: '' });
       }
     }
 
-    return { keys, cols };
+    return { keys, cols: this.cols };
   }
 
   async _scan() {
@@ -147,8 +153,7 @@ class StreamDeckManager extends EventEmitter {
       log.info('StreamDeck', `Connected: ${this.model} (${this.keyCount} keys)`);
       this.emit('connected', { model: this.model, keyCount: this.keyCount });
 
-      // Set up button handler with explicit logging
-      // In @elgato-stream-deck/node v7.x, need to determine the event structure
+      // Set up button handler
       this.device.on('down', (event) => {
         log.info('StreamDeck', `Raw key down event: ${JSON.stringify(event)}, type: ${typeof event}`);
 
@@ -157,7 +162,6 @@ class StreamDeckManager extends EventEmitter {
         if (typeof event === 'number') {
           keyIndex = event;
         } else if (typeof event === 'object' && event !== null) {
-          // Try various properties that might contain the key index
           keyIndex = event.key ?? event.keyIndex ?? event.index ?? event.button;
         }
 
@@ -189,7 +193,6 @@ class StreamDeckManager extends EventEmitter {
     if (this.device) {
       try {
         log.info('StreamDeck', 'Closing device and removing listeners');
-        // Remove all event listeners to prevent memory leaks
         this.device.removeAllListeners();
         this.device.close();
         log.info('StreamDeck', 'Device closed successfully');
@@ -219,7 +222,7 @@ class StreamDeckManager extends EventEmitter {
     log.info('StreamDeck', `Processing key press for index ${keyIndex}`);
     const layout = this._getLayout();
 
-    // Check control buttons (bottom row)
+    // Check control buttons
     const controlAction = layout.controls[keyIndex];
     if (controlAction) {
       log.info('StreamDeck', `Control button: ${controlAction.label} (key ${keyIndex}, buttonId ${controlAction.buttonId})`);
@@ -230,15 +233,53 @@ class StreamDeckManager extends EventEmitter {
       return;
     }
 
-    // Check preset buttons (top row)
+    // Check preset buttons
     const presetAction = layout.presets[keyIndex];
     if (presetAction) {
       log.info('StreamDeck', `Preset button: ${presetAction.label} (key ${keyIndex}, ${presetAction.seconds}s)`);
-      this.lastPresetTime = presetAction.seconds; // Track preset selection
       this.emit('set-time', {
         remoteId: this.remoteId,
         seconds: presetAction.seconds,
       });
+      return;
+    }
+
+    // Check adjustment buttons
+    const adjustAction = layout.adjustments[keyIndex];
+    if (adjustAction) {
+      const newTime = Math.max(0, this.currentTime + adjustAction.adjust);
+      log.info('StreamDeck', `Adjustment: ${adjustAction.label} (key ${keyIndex}, ${this.currentTime}s → ${newTime}s)`);
+      this.emit('set-time', {
+        remoteId: this.remoteId,
+        seconds: newTime,
+      });
+      return;
+    }
+
+    // Check special buttons
+    const specialAction = layout.special[keyIndex];
+    if (specialAction) {
+      if (specialAction.type === 'reset') {
+        log.info('StreamDeck', `RESET button pressed (key ${keyIndex})`);
+        // Capture current time for LAST preset
+        this.lastResetTime = this.currentTime;
+        log.info('StreamDeck', `Captured last reset time: ${this.lastResetTime}s`);
+        // Send STOP
+        this.emit('button-press', {
+          remoteId: this.remoteId,
+          buttonId: BUTTON_STOP,
+        });
+      } else if (specialAction.type === 'lastPreset') {
+        log.info('StreamDeck', `LAST preset button pressed (key ${keyIndex}, ${this.lastResetTime}s)`);
+        if (this.lastResetTime > 0) {
+          this.emit('set-time', {
+            remoteId: this.remoteId,
+            seconds: this.lastResetTime,
+          });
+        }
+      } else if (specialAction.type === 'status') {
+        log.debug('StreamDeck', `STATUS display (key ${keyIndex}) - display only, no action`);
+      }
       return;
     }
 
@@ -250,94 +291,144 @@ class StreamDeckManager extends EventEmitter {
     const controls = {};
     const presets = {};
     const display = {};
+    const adjustments = {};
+    const special = {};
 
     if (this.keyCount <= 6) {
-      // 6-key Mini: row 0 = presets (3), row 1 = controls (3)
-      presets[0] = { seconds: 180, label: '3:00' };
-      presets[1] = { seconds: 300, label: '5:00' };
-      presets[2] = { seconds: 600, label: '10:00' };
+      // 6-key Mini: simplified layout
+      presets[0] = { seconds: 60, label: '1:00' };
+      presets[1] = { seconds: 120, label: '2:00' };
+      presets[2] = { seconds: 300, label: '5:00' };
       controls[3] = { buttonId: BUTTON_PLAY, label: 'PLAY' };
       controls[4] = { buttonId: BUTTON_PAUSE, label: 'PAUSE' };
       controls[5] = { buttonId: BUTTON_STOP, label: 'STOP' };
     } else {
-      // 15-key (standard) or larger: row 0 = presets, row 1 = display, row 2 = controls
-      const c = this.cols;
+      // 15-key (standard) layout:
+      // Row 0 (0-4): [1:00] [2:00] [5:00] [LAST] [+10s]
+      // Row 1 (5-9): [-10s] [-5s] [+5s] [MINS] [SECS]
+      // Row 2 (10-14): [PLAY] [PAUSE/RES] [STOP] [RESET] [STATUS]
 
-      // Row 0: presets
-      for (let i = 0; i < Math.min(PRESETS.length, c); i++) {
-        const mins = PRESETS[i] / 60;
-        presets[i] = { seconds: PRESETS[i], label: `${mins}:00` };
-      }
+      // Row 0: Presets and +10s
+      presets[0] = { seconds: 60, label: '1:00' };
+      presets[1] = { seconds: 120, label: '2:00' };
+      presets[2] = { seconds: 300, label: '5:00' };
+      special[3] = { type: 'lastPreset', label: 'LAST' };
+      adjustments[4] = { adjust: 10, label: '+10s' };
 
-      // Row 1 (middle): timer display - center 3 buttons (6, 7, 8)
-      display[6] = { label: 'PRESET' };
-      display[7] = { label: 'MINS' };
-      display[8] = { label: 'SECS' };
+      // Row 1: Adjustments and display
+      adjustments[5] = { adjust: -10, label: '-10s' };
+      adjustments[6] = { adjust: -5, label: '-5s' };
+      adjustments[7] = { adjust: 5, label: '+5s' };
+      display[8] = { label: 'MINS' };
+      display[9] = { label: 'SECS' };
 
-      // Row 2 (bottom): controls
-      const row2 = 2 * c;
-      controls[row2] = { buttonId: BUTTON_PLAY, label: 'PLAY' };
-      controls[row2 + 1] = { buttonId: BUTTON_PAUSE, label: 'PAUSE' };
-      controls[row2 + 2] = { buttonId: BUTTON_STOP, label: 'STOP' };
-      controls[row2 + 3] = { buttonId: BUTTON_TOGGLE, label: 'TOGGLE' };
+      // Row 2: Controls
+      controls[10] = { buttonId: BUTTON_PLAY, label: 'PLAY' };
+      controls[11] = { buttonId: BUTTON_PAUSE, label: 'PAUSE' }; // Will be updated dynamically
+      controls[12] = { buttonId: BUTTON_STOP, label: 'STOP' };
+      special[13] = { type: 'reset', label: 'RESET' };
+      special[14] = { type: 'status', label: 'STATUS' };
     }
 
-    return { controls, presets, display };
+    return { controls, presets, display, adjustments, special };
   }
 
   async updateTimerDisplay(time, flags) {
     if (!this.connected || !this.device) return;
     this.lastFlags = flags;
+    this.currentTime = time; // Track current time for adjustments
 
-    // Determine state color
-    let controlColor;
-    if (flags & FLAG_EXPIRED) {
-      controlColor = COLOR_RED;
-    } else if (flags & FLAG_RUNNING) {
-      controlColor = COLOR_GREEN;
-    } else if (flags & FLAG_CONNECTED) {
-      // Connected but stopped/paused — check if paused (time > 0) or stopped
-      controlColor = time > 0 ? COLOR_YELLOW : COLOR_GRAY;
+    // Determine state
+    const isRunning = (flags & FLAG_RUNNING) !== 0;
+    const isExpired = (flags & FLAG_EXPIRED) !== 0;
+    const isConnected = (flags & FLAG_CONNECTED) !== 0;
+    const isPaused = isConnected && !isRunning && !isExpired && time > 0;
+
+    // Determine state color (traffic light)
+    let stateColor;
+    let statusText;
+    if (isExpired) {
+      stateColor = COLOR_RED;
+      statusText = 'EXPIRED';
+    } else if (isRunning) {
+      stateColor = COLOR_GREEN;
+      statusText = 'RUNNING';
+    } else if (isPaused) {
+      stateColor = COLOR_YELLOW;
+      statusText = 'PAUSED';
     } else {
-      controlColor = COLOR_GRAY;
+      stateColor = COLOR_GRAY;
+      statusText = 'STOPPED';
     }
 
     const layout = this._getLayout();
 
     try {
-      // Update control buttons with state color and text
+      // Update control buttons
       for (const keyStr of Object.keys(layout.controls)) {
         const key = parseInt(keyStr, 10);
         const ctrl = layout.controls[key];
-        await this._fillKeyWithText(key, ctrl.label, controlColor);
+
+        // Change PAUSE button text based on state
+        let buttonLabel = ctrl.label;
+        if (ctrl.buttonId === BUTTON_PAUSE) {
+          buttonLabel = isPaused ? 'RESUME' : 'PAUSE';
+        }
+
+        await this._fillKeyWithText(key, buttonLabel, stateColor);
       }
 
-      // Presets always cyan when connected, gray otherwise
-      const presetColor = flags & FLAG_CONNECTED ? COLOR_CYAN : COLOR_GRAY;
+      // Update preset buttons (cyan when connected)
+      const presetColor = isConnected ? COLOR_CYAN : COLOR_GRAY;
       for (const keyStr of Object.keys(layout.presets)) {
         const key = parseInt(keyStr, 10);
         const preset = layout.presets[key];
         await this._fillKeyWithText(key, preset.label, presetColor);
       }
 
-      // Update display buttons (6, 7, 8) with timer text
+      // Update adjustment buttons (purple when connected)
+      const adjColor = isConnected ? COLOR_PURPLE : COLOR_GRAY;
+      for (const keyStr of Object.keys(layout.adjustments)) {
+        const key = parseInt(keyStr, 10);
+        const adj = layout.adjustments[key];
+        await this._fillKeyWithText(key, adj.label, adjColor);
+      }
+
+      // Update special buttons
+      for (const keyStr of Object.keys(layout.special)) {
+        const key = parseInt(keyStr, 10);
+        const special = layout.special[key];
+
+        if (special.type === 'lastPreset') {
+          // LAST preset - show captured time or "LAST"
+          const lastMins = Math.floor(this.lastResetTime / 60);
+          const lastSecs = this.lastResetTime % 60;
+          const lastLabel = this.lastResetTime > 0
+            ? `${lastMins}:${String(lastSecs).padStart(2, '0')}`
+            : 'LAST';
+          await this._fillKeyWithText(key, lastLabel, this.lastResetTime > 0 ? COLOR_ORANGE : COLOR_GRAY);
+        } else if (special.type === 'reset') {
+          // RESET button
+          await this._fillKeyWithText(key, special.label, isConnected ? COLOR_RED : COLOR_GRAY);
+        } else if (special.type === 'status') {
+          // STATUS display with traffic light colors
+          await this._fillKeyWithText(key, statusText, stateColor);
+        }
+      }
+
+      // Update display buttons with timer values
       if (this.keyCount >= 15) {
         const mins = Math.floor(time / 60);
         const secs = time % 60;
-        const presetMins = Math.floor(this.lastPresetTime / 60);
 
-        // Button 6: Preset time
-        await this._fillKeyWithText(6, `${presetMins}:00`, COLOR_BLUE);
+        // Button 8: Current minutes
+        await this._fillKeyWithText(8, mins.toString().padStart(2, '0'), stateColor);
 
-        // Button 7: Current minutes
-        await this._fillKeyWithText(7, mins.toString().padStart(2, '0'), controlColor);
-
-        // Button 8: Current seconds
-        await this._fillKeyWithText(8, secs.toString().padStart(2, '0'), controlColor);
+        // Button 9: Current seconds
+        await this._fillKeyWithText(9, secs.toString().padStart(2, '0'), stateColor);
       }
     } catch (err) {
       log.debug('StreamDeck', `Timer display update error: ${err.message}`);
-      // Device may have been disconnected
       if (this.connected) {
         this._handleDisconnect();
       }
@@ -357,22 +448,45 @@ class StreamDeckManager extends EventEmitter {
 
       // Light up mapped keys with text labels
       const layout = this._getLayout();
+
+      // Controls
       for (const keyStr of Object.keys(layout.controls)) {
         const key = parseInt(keyStr, 10);
         const ctrl = layout.controls[key];
         await this._fillKeyWithText(key, ctrl.label, COLOR_GRAY);
       }
+
+      // Presets
       for (const keyStr of Object.keys(layout.presets)) {
         const key = parseInt(keyStr, 10);
         const preset = layout.presets[key];
         await this._fillKeyWithText(key, preset.label, COLOR_CYAN);
       }
 
-      // Initialize display buttons with labels
+      // Adjustments
+      for (const keyStr of Object.keys(layout.adjustments)) {
+        const key = parseInt(keyStr, 10);
+        const adj = layout.adjustments[key];
+        await this._fillKeyWithText(key, adj.label, COLOR_PURPLE);
+      }
+
+      // Special buttons
+      for (const keyStr of Object.keys(layout.special)) {
+        const key = parseInt(keyStr, 10);
+        const special = layout.special[key];
+        if (special.type === 'lastPreset') {
+          await this._fillKeyWithText(key, 'LAST', COLOR_GRAY);
+        } else if (special.type === 'reset') {
+          await this._fillKeyWithText(key, 'RESET', COLOR_GRAY);
+        } else if (special.type === 'status') {
+          await this._fillKeyWithText(key, 'STOPPED', COLOR_GRAY);
+        }
+      }
+
+      // Display buttons
       if (this.keyCount >= 15) {
-        await this._fillKeyWithText(6, 'PRESET', COLOR_GRAY);
-        await this._fillKeyWithText(7, '--', COLOR_GRAY);
         await this._fillKeyWithText(8, '--', COLOR_GRAY);
+        await this._fillKeyWithText(9, '--', COLOR_GRAY);
       }
 
       log.info('StreamDeck', 'Initial colors and labels set successfully');
@@ -387,7 +501,6 @@ class StreamDeckManager extends EventEmitter {
       this.device.fillKeyColor(keyIndex, r, g, b);
     } catch (err) {
       log.debug('StreamDeck', `fillKeyColor error for key ${keyIndex}: ${err.message}`);
-      // Device may have been disconnected
       if (this.connected) {
         this._handleDisconnect();
       }
@@ -408,7 +521,7 @@ class StreamDeckManager extends EventEmitter {
             text-anchor="middle"
             dominant-baseline="middle"
             font-family="Arial, sans-serif"
-            font-size="20"
+            font-size="18"
             font-weight="bold"
             fill="white"
           >${text}</text>
@@ -431,8 +544,7 @@ class StreamDeckManager extends EventEmitter {
   }
 
   broadcastToAll(_message) {
-    // Interface compatibility with SerialManager — Stream Deck doesn't receive
-    // raw serial messages. Timer display is handled via updateTimerDisplay().
+    // Interface compatibility with SerialManager
   }
 }
 
