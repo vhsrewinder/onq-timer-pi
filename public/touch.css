@@ -103,7 +103,7 @@ body {
 .timer-status.paused { color: #c8b400; }
 .timer-status.stopped { color: #888; }
 
-/* Stream Deck Grid - Adaptive sizing */
+/* Stream Deck Grid - Fixed sizing to prevent overlap */
 .sd-grid {
   flex: 1;
   display: grid;
@@ -113,19 +113,12 @@ body {
   padding: clamp(0.25rem, 1vw, 0.5rem);
   background: #0a0a1a;
   border-radius: 12px;
-  min-height: 0;
-  max-width: 100%;
-  aspect-ratio: 5 / 3;
-  margin: 0 auto;
   width: 100%;
-}
-
-/* Ensure grid fits properly in available space */
-@supports (aspect-ratio: 5 / 3) {
-  .sd-grid {
-    max-height: calc(100vh - 200px);
-    max-height: calc(100dvh - 200px);
-  }
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  align-content: center;
+  justify-content: center;
 }
 
 .sd-key {
@@ -143,11 +136,12 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   position: relative;
   overflow: hidden;
-  min-height: 0;
-  aspect-ratio: 1;
   padding: 0.25rem;
   word-wrap: break-word;
   hyphens: auto;
+  /* Remove aspect-ratio to prevent overlap */
+  width: 100%;
+  height: 100%;
 }
 
 .sd-key::before {
@@ -229,9 +223,6 @@ body {
 
   .sd-grid {
     flex: 1;
-    max-height: 90vh;
-    max-height: 90dvh;
-    width: auto;
   }
 
   .connection-status {
@@ -246,7 +237,7 @@ body {
 /* Portrait orientation - stack vertically */
 @media (orientation: portrait) {
   .sd-grid {
-    max-width: 95vw;
+    max-width: 100%;
   }
 }
 
@@ -271,10 +262,42 @@ body {
   }
 }
 
-/* Fullscreen mode adjustments */
+/* Fullscreen mode - truly fullscreen with no padding */
+:fullscreen,
+:-webkit-full-screen,
+:-moz-full-screen,
+:-ms-fullscreen {
+  background: #0a0a1a;
+}
+
 :fullscreen .container,
 :-webkit-full-screen .container,
 :-moz-full-screen .container,
 :-ms-fullscreen .container {
-  padding: clamp(0.5rem, 2vw, 1.5rem);
+  padding: 0;
+  gap: 0;
+  height: 100vh;
+  width: 100vw;
+}
+
+:fullscreen .timer-section,
+:-webkit-full-screen .timer-section,
+:-moz-full-screen .timer-section,
+:-ms-fullscreen .timer-section {
+  border-radius: 0;
+}
+
+:fullscreen .connection-status,
+:-webkit-full-screen .connection-status,
+:-moz-full-screen .connection-status,
+:-ms-fullscreen .connection-status {
+  border-radius: 0;
+}
+
+:fullscreen .sd-grid,
+:-webkit-full-screen .sd-grid,
+:-moz-full-screen .sd-grid,
+:-ms-fullscreen .sd-grid {
+  border-radius: 0;
+  padding: 0.5rem;
 }
