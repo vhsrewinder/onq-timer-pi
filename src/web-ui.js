@@ -82,6 +82,47 @@ class WebUI {
       setTimeout(() => process.exit(0), 500);
     });
 
+    // Manual timer control
+    this.app.post('/api/timer/control', async (req, res) => {
+      const { action } = req.body;
+      const remoteId = 'webui';
+
+      // Button IDs from streamdeck-manager.js
+      const BUTTON_PLAY = 10;
+      const BUTTON_PAUSE = 12;
+      const BUTTON_STOP = 14;
+
+      try {
+        switch (action) {
+          case 'play':
+            await this.onqClient.postButtonPress(remoteId, BUTTON_PLAY);
+            log.info('WebUI', 'Manual timer control: PLAY');
+            break;
+          case 'pause':
+            await this.onqClient.postButtonPress(remoteId, BUTTON_PAUSE);
+            log.info('WebUI', 'Manual timer control: PAUSE');
+            break;
+          case 'stop':
+            await this.onqClient.postButtonPress(remoteId, BUTTON_STOP);
+            log.info('WebUI', 'Manual timer control: STOP');
+            break;
+          case 'reset-start':
+            await this.onqClient.postButtonPress(remoteId, BUTTON_STOP);
+            setTimeout(async () => {
+              await this.onqClient.postButtonPress(remoteId, BUTTON_PLAY);
+            }, 100);
+            log.info('WebUI', 'Manual timer control: RESET & START');
+            break;
+          default:
+            return res.status(400).json({ error: 'Invalid action' });
+        }
+        res.json({ success: true, action });
+      } catch (err) {
+        log.error('WebUI', `Timer control failed: ${err.message}`);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // SSE
     this.app.get('/api/events', (req, res) => {
       res.writeHead(200, {
@@ -115,6 +156,13 @@ class WebUI {
       });
       this.streamDeckManager.on('disconnected', () => {
         this._broadcastSSE('streamdeck-disconnected', {});
+      });
+      // Broadcast button events for logging
+      this.streamDeckManager.on('button-press', (data) => {
+        this._broadcastSSE('streamdeck-button', { ...data, type: 'button' });
+      });
+      this.streamDeckManager.on('set-time', (data) => {
+        this._broadcastSSE('streamdeck-preset', { ...data, type: 'preset' });
       });
     }
 

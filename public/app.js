@@ -3,6 +3,7 @@
 // --- State ---
 let status = null;
 let sdTimerState = null; // track timer state for SD key colors
+let eventLog = []; // Store Stream Deck events
 
 // --- Init ---
 fetchStatus();
@@ -72,6 +73,86 @@ async function restartService() {
   setTimeout(() => location.reload(), 3000);
 }
 
+// --- Manual Timer Control ---
+
+async function controlTimer(action) {
+  const statusEl = document.getElementById('timer-control-status');
+
+  try {
+    statusEl.textContent = 'Sending command...';
+    statusEl.style.color = '#888';
+
+    const res = await fetch('/api/timer/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+
+    const result = await res.json();
+
+    if (result.success) {
+      statusEl.textContent = `✓ ${action.toUpperCase()} sent successfully`;
+      statusEl.style.color = '#0a0';
+      setTimeout(() => {
+        statusEl.textContent = '';
+      }, 3000);
+    } else {
+      statusEl.textContent = `✗ Failed: ${result.error || 'Unknown error'}`;
+      statusEl.style.color = '#c00';
+    }
+  } catch (err) {
+    statusEl.textContent = `✗ Error: ${err.message}`;
+    statusEl.style.color = '#c00';
+  }
+}
+
+// --- Event Log ---
+
+function addEventToLog(type, data) {
+  const timestamp = new Date().toLocaleTimeString();
+  const event = { timestamp, type, data };
+
+  eventLog.unshift(event); // Add to beginning
+  if (eventLog.length > 50) eventLog.pop(); // Keep last 50 events
+
+  renderEventLog();
+}
+
+function clearEventLog() {
+  eventLog = [];
+  renderEventLog();
+}
+
+function renderEventLog() {
+  const container = document.getElementById('event-log');
+
+  if (eventLog.length === 0) {
+    container.innerHTML = '<p class="empty">No events yet. Press buttons on the Stream Deck.</p>';
+    return;
+  }
+
+  let html = '<div style="font-size:0.9em;">';
+  for (const evt of eventLog) {
+    const typeLabel = evt.type === 'button' ? '🔘 Button' : '⏱ Preset';
+    let description = '';
+
+    if (evt.type === 'button') {
+      description = `Button ID ${evt.data.buttonId} pressed (remote: ${evt.data.remoteId})`;
+    } else if (evt.type === 'preset') {
+      const mins = Math.floor(evt.data.seconds / 60);
+      description = `Preset ${mins}:00 selected (${evt.data.seconds}s, remote: ${evt.data.remoteId})`;
+    }
+
+    html += `<div style="padding:0.3rem 0; border-bottom:1px solid #333;">`;
+    html += `<span style="color:#888;">[${evt.timestamp}]</span> `;
+    html += `<strong>${typeLabel}</strong>: ${description}`;
+    html += `</div>`;
+  }
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
 // --- SSE ---
 
 function connectSSE() {
@@ -101,6 +182,12 @@ function handleSSE(msg) {
     case 'streamdeck-connected':
     case 'streamdeck-disconnected':
       fetchStatus();
+      break;
+    case 'streamdeck-button':
+      addEventToLog('button', { buttonId: msg.buttonId, remoteId: msg.remoteId });
+      break;
+    case 'streamdeck-preset':
+      addEventToLog('preset', { seconds: msg.seconds, remoteId: msg.remoteId });
       break;
   }
 }

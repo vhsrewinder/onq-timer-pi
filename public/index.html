@@ -49,6 +49,30 @@
     <div id="timer-display" class="timer-display stopped">--:--</div>
   </div>
 
+  <!-- Manual Timer Controls -->
+  <div class="card">
+    <h2>Manual Timer Control</h2>
+    <div class="form-row">
+      <button onclick="controlTimer('play')" class="timer-btn">▶ Start</button>
+      <button onclick="controlTimer('pause')" class="timer-btn">⏸ Pause</button>
+      <button onclick="controlTimer('stop')" class="timer-btn">⏹ Stop</button>
+      <button onclick="controlTimer('reset-start')" class="timer-btn">🔄 Reset & Start</button>
+    </div>
+    <div id="timer-control-status" style="margin-top:0.5rem; font-size:0.9em; color:#888;"></div>
+  </div>
+
+  <!-- Event Log -->
+  <div class="card">
+    <h2>Stream Deck Events</h2>
+    <div style="margin-bottom:0.5rem; display:flex; justify-content:space-between; align-items:center;">
+      <small style="color:#888;">Recent button presses and preset selections</small>
+      <button onclick="clearEventLog()" style="font-size:0.8em;">Clear Log</button>
+    </div>
+    <div id="event-log" class="event-log">
+      <p class="empty">No events yet. Press buttons on the Stream Deck.</p>
+    </div>
+  </div>
+
   <!-- Service Controls -->
   <div class="card">
     <h2>Service</h2>
