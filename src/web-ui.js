@@ -123,6 +123,35 @@ class WebUI {
       }
     });
 
+    // Stream Deck button simulation
+    this.app.post('/api/streamdeck/simulate', (req, res) => {
+      if (!this.streamDeckManager || !this.streamDeckManager.connected) {
+        return res.status(400).json({
+          success: false,
+          error: 'Stream Deck not connected'
+        });
+      }
+
+      const { index, type } = req.body;
+
+      if (index === undefined || type === undefined) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing index or type'
+        });
+      }
+
+      try {
+        // Simulate button press by calling the internal handler
+        log.info('WebUI', `Simulating Stream Deck button press: index=${index}, type=${type}`);
+        this.streamDeckManager._handleKeyDown(index);
+        res.json({ success: true, index, type });
+      } catch (err) {
+        log.error('WebUI', `Stream Deck simulation failed: ${err.message}`);
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
     // SSE
     this.app.get('/api/events', (req, res) => {
       res.writeHead(200, {

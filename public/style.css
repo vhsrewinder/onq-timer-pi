@@ -171,6 +171,7 @@ pre.log-box {
   text-align: center;
   line-height: 1.2;
   border: 1px solid rgba(255,255,255,0.1);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
 .sd-key.preset { background: #009696; }
@@ -180,5 +181,22 @@ pre.log-box {
 .sd-key.control.running { background: #00b400; }
 .sd-key.control.paused { background: #c8b400; }
 .sd-key.control.expired { background: #c80000; }
+
+/* Clickable Stream Deck keys */
+.sd-key.clickable {
+  cursor: pointer;
+}
+
+.sd-key.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 212, 255, 0.3);
+  border-color: rgba(0, 212, 255, 0.5);
+}
+
+.sd-key.clickable:active,
+.sd-key.pressed {
+  transform: translateY(1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4) inset;
+}
 
 .empty { color: #666; font-style: italic; }

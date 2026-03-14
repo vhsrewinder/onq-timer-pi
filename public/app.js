@@ -106,6 +106,30 @@ async function controlTimer(action) {
   }
 }
 
+// --- Stream Deck Simulation ---
+
+async function simulateStreamDeckPress(key) {
+  try {
+    const res = await fetch('/api/streamdeck/simulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        index: key.index,
+        type: key.type,
+        seconds: key.seconds, // for presets
+      }),
+    });
+
+    const result = await res.json();
+
+    if (!result.success) {
+      console.error('Failed to simulate button press:', result.error);
+    }
+  } catch (err) {
+    console.error('Error simulating button press:', err);
+  }
+}
+
 // --- Event Log ---
 
 function addEventToLog(type, data) {
@@ -127,7 +151,7 @@ function renderEventLog() {
   const container = document.getElementById('event-log');
 
   if (eventLog.length === 0) {
-    container.innerHTML = '<p class="empty">No events yet. Press buttons on the Stream Deck.</p>';
+    container.innerHTML = '<p class="empty">No events yet. Press buttons on the Stream Deck or click the visualization above.</p>';
     return;
   }
 
@@ -247,13 +271,13 @@ function renderStreamDeck(sd) {
     dot.className = 'status-dot red';
     text.textContent = 'Not connected';
     modelText.textContent = '';
-    layoutContainer.innerHTML = '<p class="empty">Plug in a Stream Deck to auto-detect</p>';
+    layoutContainer.innerHTML = '<p class="empty">Plug in a Stream Deck to auto-detect (or click visualization below when connected)</p>';
     return;
   }
 
   dot.className = 'status-dot green';
   text.textContent = 'Connected';
-  modelText.textContent = `(${sd.model}, ${sd.keyCount} keys)`;
+  modelText.textContent = `(${sd.model}, ${sd.keyCount} keys) - Click buttons to simulate`;
 
   // Render grid layout
   if (sd.layout) {
@@ -275,6 +299,21 @@ function renderStreamDeckGrid(container, layout, cols) {
     if (key.type === 'control' && sdTimerState) {
       const cls = getTimerColorClass(sdTimerState);
       if (cls) el.classList.add(cls);
+    }
+
+    // Make clickable if it's a control or preset button
+    if (key.type === 'control' || key.type === 'preset') {
+      el.classList.add('clickable');
+      el.title = `Click to simulate ${key.type} button: ${key.label}`;
+
+      el.addEventListener('click', () => {
+        // Add visual feedback
+        el.classList.add('pressed');
+        setTimeout(() => el.classList.remove('pressed'), 150);
+
+        // Simulate the press
+        simulateStreamDeckPress(key);
+      });
     }
 
     grid.appendChild(el);
