@@ -85,7 +85,7 @@ class WebUI {
     // Manual timer control
     this.app.post('/api/timer/control', async (req, res) => {
       const { action } = req.body;
-      const remoteId = 'webui';
+      const remoteId = 250; // Numeric remote ID for web UI
 
       // Button IDs from streamdeck-manager.js
       const BUTTON_PLAY = 10;

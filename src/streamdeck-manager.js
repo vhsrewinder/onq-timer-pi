@@ -40,11 +40,12 @@ class StreamDeckManager extends EventEmitter {
     this.model = null;
     this.keyCount = 0;
     this.cols = 5;
-    this.remoteId = 'streamdeck';
+    this.remoteId = 249; // Numeric remote ID for Stream Deck (must be <= 255)
     this.lastFlags = 0;
     this.lastPresetTime = 0; // Track last preset time selected
     this._listStreamDecks = null;
     this._openStreamDeck = null;
+    this.currentDevicePath = null; // Track current device path for reconnection detection
   }
 
   async start() {
@@ -104,12 +105,22 @@ class StreamDeckManager extends EventEmitter {
   }
 
   async _scan() {
-    if (this.connected) return;
     if (!this._listStreamDecks) return;
 
     try {
       const decks = await this._listStreamDecks();
-      if (decks.length > 0) {
+
+      // Check if currently connected device is still present
+      if (this.connected && this.currentDevicePath) {
+        const stillConnected = decks.some(d => d.path === this.currentDevicePath);
+        if (!stillConnected) {
+          log.info('StreamDeck', 'Device was unplugged, cleaning up...');
+          this._handleDisconnect();
+        }
+      }
+
+      // Try to connect if not connected
+      if (!this.connected && decks.length > 0) {
         await this._openDevice(decks[0].path);
       }
     } catch (err) {
@@ -119,7 +130,15 @@ class StreamDeckManager extends EventEmitter {
 
   async _openDevice(devicePath) {
     try {
+      // Close any existing stale device first
+      if (this.device) {
+        log.info('StreamDeck', 'Closing existing device before opening new one');
+        this._closeDevice();
+      }
+
+      log.info('StreamDeck', `Opening device at path: ${devicePath}`);
       this.device = await this._openStreamDeck(devicePath);
+      this.currentDevicePath = devicePath;
       this.connected = true;
       this.model = this.device.MODEL;
       this.keyCount = this.device.NUM_KEYS || this.device.KEY_COUNT || 15;
@@ -128,53 +147,82 @@ class StreamDeckManager extends EventEmitter {
       log.info('StreamDeck', `Connected: ${this.model} (${this.keyCount} keys)`);
       this.emit('connected', { model: this.model, keyCount: this.keyCount });
 
-      // Set up button handler
-      this.device.on('down', (keyIndex) => this._handleKeyDown(keyIndex));
+      // Set up button handler with explicit logging
+      // In @elgato-stream-deck/node v7.x, need to determine the event structure
+      this.device.on('down', (event) => {
+        log.info('StreamDeck', `Raw key down event: ${JSON.stringify(event)}, type: ${typeof event}`);
 
-      // Handle disconnect
+        // Try multiple possible formats
+        let keyIndex;
+        if (typeof event === 'number') {
+          keyIndex = event;
+        } else if (typeof event === 'object' && event !== null) {
+          // Try various properties that might contain the key index
+          keyIndex = event.key ?? event.keyIndex ?? event.index ?? event.button;
+        }
+
+        log.info('StreamDeck', `Extracted keyIndex: ${keyIndex}`);
+        if (keyIndex !== undefined) {
+          this._handleKeyDown(keyIndex);
+        }
+      });
+
+      // Handle disconnect/error
       this.device.on('error', (err) => {
         log.warn('StreamDeck', `Device error: ${err.message}`);
         this._handleDisconnect();
       });
 
-      // Set initial button colors
+      // Set initial button colors and labels
       await this._setInitialColors();
+
+      log.info('StreamDeck', 'Device fully initialized, listening for button presses');
     } catch (err) {
-      log.error('StreamDeck', `Failed to open: ${err.message}`);
+      log.error('StreamDeck', `Failed to open device: ${err.message}`);
       this.device = null;
       this.connected = false;
+      this.currentDevicePath = null;
     }
   }
 
   _closeDevice() {
     if (this.device) {
       try {
+        log.info('StreamDeck', 'Closing device and removing listeners');
+        // Remove all event listeners to prevent memory leaks
+        this.device.removeAllListeners();
         this.device.close();
-      } catch {
-        // ignore close errors
+        log.info('StreamDeck', 'Device closed successfully');
+      } catch (err) {
+        log.debug('StreamDeck', `Close error (ignored): ${err.message}`);
       }
       this.device = null;
     }
     this.connected = false;
     this.model = null;
     this.keyCount = 0;
+    this.currentDevicePath = null;
   }
 
   _handleDisconnect() {
-    log.info('StreamDeck', 'Device disconnected');
+    log.info('StreamDeck', 'Handling device disconnection');
     this._closeDevice();
     this.emit('disconnected');
   }
 
   _handleKeyDown(keyIndex) {
-    if (!this.connected) return;
+    if (!this.connected) {
+      log.warn('StreamDeck', `Key ${keyIndex} pressed but device marked as disconnected`);
+      return;
+    }
 
+    log.info('StreamDeck', `Processing key press for index ${keyIndex}`);
     const layout = this._getLayout();
 
     // Check control buttons (bottom row)
     const controlAction = layout.controls[keyIndex];
     if (controlAction) {
-      log.info('StreamDeck', `Button: ${controlAction.label} (key ${keyIndex})`);
+      log.info('StreamDeck', `Control button: ${controlAction.label} (key ${keyIndex}, buttonId ${controlAction.buttonId})`);
       this.emit('button-press', {
         remoteId: this.remoteId,
         buttonId: controlAction.buttonId,
@@ -185,7 +233,7 @@ class StreamDeckManager extends EventEmitter {
     // Check preset buttons (top row)
     const presetAction = layout.presets[keyIndex];
     if (presetAction) {
-      log.info('StreamDeck', `Preset: ${presetAction.label} (key ${keyIndex})`);
+      log.info('StreamDeck', `Preset button: ${presetAction.label} (key ${keyIndex}, ${presetAction.seconds}s)`);
       this.lastPresetTime = presetAction.seconds; // Track preset selection
       this.emit('set-time', {
         remoteId: this.remoteId,
@@ -194,7 +242,7 @@ class StreamDeckManager extends EventEmitter {
       return;
     }
 
-    log.debug('StreamDeck', `Unmapped key: ${keyIndex}`);
+    log.debug('StreamDeck', `Unmapped key pressed: ${keyIndex}`);
   }
 
   _getLayout() {
@@ -256,28 +304,28 @@ class StreamDeckManager extends EventEmitter {
 
     const layout = this._getLayout();
 
-    // Update control buttons with state color
-    for (const keyStr of Object.keys(layout.controls)) {
-      const key = parseInt(keyStr, 10);
-      const ctrl = layout.controls[key];
-      await this._fillKeyWithText(key, ctrl.label, controlColor);
-    }
+    try {
+      // Update control buttons with state color and text
+      for (const keyStr of Object.keys(layout.controls)) {
+        const key = parseInt(keyStr, 10);
+        const ctrl = layout.controls[key];
+        await this._fillKeyWithText(key, ctrl.label, controlColor);
+      }
 
-    // Presets always cyan when connected, gray otherwise
-    const presetColor = flags & FLAG_CONNECTED ? COLOR_CYAN : COLOR_GRAY;
-    for (const keyStr of Object.keys(layout.presets)) {
-      const key = parseInt(keyStr, 10);
-      const preset = layout.presets[key];
-      await this._fillKeyWithText(key, preset.label, presetColor);
-    }
+      // Presets always cyan when connected, gray otherwise
+      const presetColor = flags & FLAG_CONNECTED ? COLOR_CYAN : COLOR_GRAY;
+      for (const keyStr of Object.keys(layout.presets)) {
+        const key = parseInt(keyStr, 10);
+        const preset = layout.presets[key];
+        await this._fillKeyWithText(key, preset.label, presetColor);
+      }
 
-    // Update display buttons (6, 7, 8) with timer text
-    if (this.keyCount >= 15) {
-      const mins = Math.floor(time / 60);
-      const secs = time % 60;
-      const presetMins = Math.floor(this.lastPresetTime / 60);
+      // Update display buttons (6, 7, 8) with timer text
+      if (this.keyCount >= 15) {
+        const mins = Math.floor(time / 60);
+        const secs = time % 60;
+        const presetMins = Math.floor(this.lastPresetTime / 60);
 
-      try {
         // Button 6: Preset time
         await this._fillKeyWithText(6, `${presetMins}:00`, COLOR_BLUE);
 
@@ -286,8 +334,12 @@ class StreamDeckManager extends EventEmitter {
 
         // Button 8: Current seconds
         await this._fillKeyWithText(8, secs.toString().padStart(2, '0'), controlColor);
-      } catch (err) {
-        log.debug('StreamDeck', `Text render error: ${err.message}`);
+      }
+    } catch (err) {
+      log.debug('StreamDeck', `Timer display update error: ${err.message}`);
+      // Device may have been disconnected
+      if (this.connected) {
+        this._handleDisconnect();
       }
     }
   }
@@ -295,29 +347,37 @@ class StreamDeckManager extends EventEmitter {
   async _setInitialColors() {
     if (!this.device) return;
 
-    // All keys black initially
-    for (let i = 0; i < this.keyCount; i++) {
-      this._fillKey(i, COLOR_OFF);
-    }
+    log.info('StreamDeck', 'Setting initial button colors and labels');
 
-    // Light up mapped keys
-    const layout = this._getLayout();
-    for (const keyStr of Object.keys(layout.controls)) {
-      this._fillKey(parseInt(keyStr, 10), COLOR_GRAY);
-    }
-    for (const keyStr of Object.keys(layout.presets)) {
-      this._fillKey(parseInt(keyStr, 10), COLOR_CYAN);
-    }
+    try {
+      // All keys black initially
+      for (let i = 0; i < this.keyCount; i++) {
+        this._fillKey(i, COLOR_OFF);
+      }
 
-    // Initialize display buttons with labels
-    if (this.keyCount >= 15) {
-      try {
+      // Light up mapped keys with text labels
+      const layout = this._getLayout();
+      for (const keyStr of Object.keys(layout.controls)) {
+        const key = parseInt(keyStr, 10);
+        const ctrl = layout.controls[key];
+        await this._fillKeyWithText(key, ctrl.label, COLOR_GRAY);
+      }
+      for (const keyStr of Object.keys(layout.presets)) {
+        const key = parseInt(keyStr, 10);
+        const preset = layout.presets[key];
+        await this._fillKeyWithText(key, preset.label, COLOR_CYAN);
+      }
+
+      // Initialize display buttons with labels
+      if (this.keyCount >= 15) {
         await this._fillKeyWithText(6, 'PRESET', COLOR_GRAY);
         await this._fillKeyWithText(7, '--', COLOR_GRAY);
         await this._fillKeyWithText(8, '--', COLOR_GRAY);
-      } catch (err) {
-        log.debug('StreamDeck', `Initial text render error: ${err.message}`);
       }
+
+      log.info('StreamDeck', 'Initial colors and labels set successfully');
+    } catch (err) {
+      log.error('StreamDeck', `Failed to set initial colors: ${err.message}`);
     }
   }
 
@@ -326,7 +386,11 @@ class StreamDeckManager extends EventEmitter {
     try {
       this.device.fillKeyColor(keyIndex, r, g, b);
     } catch (err) {
-      log.debug('StreamDeck', `fillKeyColor error: ${err.message}`);
+      log.debug('StreamDeck', `fillKeyColor error for key ${keyIndex}: ${err.message}`);
+      // Device may have been disconnected
+      if (this.connected) {
+        this._handleDisconnect();
+      }
     }
   }
 
