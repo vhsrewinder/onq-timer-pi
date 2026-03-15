@@ -30,6 +30,8 @@ const COLOR_CYAN = [0, 150, 150];
 const COLOR_PURPLE = [150, 0, 150];
 const COLOR_ORANGE = [220, 120, 0];
 
+// Stream Deck original button size
+const ICON_SIZE = 72;
 
 class StreamDeckManager extends EventEmitter {
   constructor() {
@@ -40,7 +42,6 @@ class StreamDeckManager extends EventEmitter {
     this.model = null;
     this.keyCount = 0;
     this.cols = 5;
-    this.iconSize = 72; // Default for Stream Deck Original
     this.remoteId = 249; // Numeric remote ID for Stream Deck (must be <= 255)
     this.lastFlags = 0;
     this.currentTime = 0; // Track current timer time for adjustments
@@ -150,15 +151,7 @@ class StreamDeckManager extends EventEmitter {
       this.keyCount = this.device.NUM_KEYS || this.device.KEY_COUNT || 15;
       this.cols = this.device.KEY_COLUMNS || this.device.ICON_SIZE || 5;
 
-      // Fallback: Detect XL based on model name if keyCount detection failed
-      if (this.model === 'xl' && this.keyCount === 15) {
-        log.info('StreamDeck', `XL model detected but keyCount is 15, overriding to 32`);
-        this.keyCount = 32;
-        this.cols = 8;
-        this.iconSize = 96; // XL uses 96x96 icons
-      }
-
-      log.info('StreamDeck', `Connected: ${this.model} (${this.keyCount} keys, ${this.cols} cols)`);
+      log.info('StreamDeck', `Connected: ${this.model} (${this.keyCount} keys)`);
       this.emit('connected', { model: this.model, keyCount: this.keyCount });
 
       // Set up button handler
@@ -221,46 +214,6 @@ class StreamDeckManager extends EventEmitter {
     this.emit('disconnected');
   }
 
-  /**
-   * Map 15-key index to XL (32-key) index
-   * Places the 5x3 grid in bottom-right corner of 8x4 grid
-   * Row offset: 1, Column offset: 3
-   */
-  _map15KeyToXL(originalIndex) {
-    if (originalIndex < 0 || originalIndex >= 15) return -1;
-
-    const originalRow = Math.floor(originalIndex / 5);
-    const originalCol = originalIndex % 5;
-    const xlRow = originalRow + 1;
-    const xlCol = originalCol + 3;
-    const xlIndex = xlRow * 8 + xlCol;
-
-    return xlIndex;
-  }
-
-  /**
-   * Map XL (32-key) index to 15-key index
-   * Returns -1 if the XL key is not part of the mapped 15-key region
-   */
-  _mapXLTo15Key(xlIndex) {
-    if (xlIndex < 0 || xlIndex >= 32) return -1;
-
-    const xlRow = Math.floor(xlIndex / 8);
-    const xlCol = xlIndex % 8;
-
-    // Check if this XL key is within the mapped region
-    // Mapped region: rows 1-3, columns 3-7
-    if (xlRow < 1 || xlRow > 3 || xlCol < 3 || xlCol > 7) {
-      return -1; // Not in mapped region
-    }
-
-    const originalRow = xlRow - 1;
-    const originalCol = xlCol - 3;
-    const originalIndex = originalRow * 5 + originalCol;
-
-    return originalIndex;
-  }
-
   _handleKeyDown(keyIndex) {
     if (!this.connected) {
       log.warn('StreamDeck', `Key ${keyIndex} pressed but device marked as disconnected`);
@@ -268,24 +221,12 @@ class StreamDeckManager extends EventEmitter {
     }
 
     log.info('StreamDeck', `Processing key press for index ${keyIndex}`);
-
-    // If XL device, convert XL key index to 15-key index
-    let mappedKeyIndex = keyIndex;
-    if (this.keyCount === 32) {
-      mappedKeyIndex = this._mapXLTo15Key(keyIndex);
-      if (mappedKeyIndex === -1) {
-        log.debug('StreamDeck', `XL key ${keyIndex} not mapped to 15-key layout, ignoring`);
-        return;
-      }
-      log.info('StreamDeck', `XL key ${keyIndex} mapped to 15-key index ${mappedKeyIndex}`);
-    }
-
     const layout = this._getLayout();
 
     // Check control buttons (combined START/PAUSE/RESUME button)
-    const controlAction = layout.controls[mappedKeyIndex];
+    const controlAction = layout.controls[keyIndex];
     if (controlAction) {
-      log.info('StreamDeck', `Control button: ${controlAction.label} (key ${mappedKeyIndex}, buttonId ${this.currentControlButtonId})`);
+      log.info('StreamDeck', `Control button: ${controlAction.label} (key ${keyIndex}, buttonId ${this.currentControlButtonId})`);
       this.emit('button-press', {
         remoteId: this.remoteId,
         buttonId: this.currentControlButtonId,
@@ -294,9 +235,9 @@ class StreamDeckManager extends EventEmitter {
     }
 
     // Check preset buttons
-    const presetAction = layout.presets[mappedKeyIndex];
+    const presetAction = layout.presets[keyIndex];
     if (presetAction) {
-      log.info('StreamDeck', `Preset button: ${presetAction.label} (key ${mappedKeyIndex}, ${presetAction.seconds}s)`);
+      log.info('StreamDeck', `Preset button: ${presetAction.label} (key ${keyIndex}, ${presetAction.seconds}s)`);
       this.emit('set-time', {
         remoteId: this.remoteId,
         seconds: presetAction.seconds,
@@ -305,10 +246,10 @@ class StreamDeckManager extends EventEmitter {
     }
 
     // Check adjustment buttons
-    const adjustAction = layout.adjustments[mappedKeyIndex];
+    const adjustAction = layout.adjustments[keyIndex];
     if (adjustAction) {
       const newTime = Math.max(0, this.currentTime + adjustAction.adjust);
-      log.info('StreamDeck', `Adjustment: ${adjustAction.label} (key ${mappedKeyIndex}, ${this.currentTime}s → ${newTime}s)`);
+      log.info('StreamDeck', `Adjustment: ${adjustAction.label} (key ${keyIndex}, ${this.currentTime}s → ${newTime}s)`);
       this.emit('set-time', {
         remoteId: this.remoteId,
         seconds: newTime,
@@ -317,10 +258,10 @@ class StreamDeckManager extends EventEmitter {
     }
 
     // Check special buttons
-    const specialAction = layout.special[mappedKeyIndex];
+    const specialAction = layout.special[keyIndex];
     if (specialAction) {
       if (specialAction.type === 'reset') {
-        log.info('StreamDeck', `RESET button pressed (key ${mappedKeyIndex})`);
+        log.info('StreamDeck', `RESET button pressed (key ${keyIndex})`);
         // Capture current time for LAST preset
         this.lastResetTime = this.currentTime;
         log.info('StreamDeck', `Captured last reset time: ${this.lastResetTime}s`);
@@ -330,7 +271,7 @@ class StreamDeckManager extends EventEmitter {
           buttonId: BUTTON_STOP,
         });
       } else if (specialAction.type === 'lastPreset') {
-        log.info('StreamDeck', `LAST preset button pressed (key ${mappedKeyIndex}, ${this.lastResetTime}s)`);
+        log.info('StreamDeck', `LAST preset button pressed (key ${keyIndex}, ${this.lastResetTime}s)`);
         if (this.lastResetTime > 0) {
           this.emit('set-time', {
             remoteId: this.remoteId,
@@ -338,12 +279,12 @@ class StreamDeckManager extends EventEmitter {
           });
         }
       } else if (specialAction.type === 'status') {
-        log.debug('StreamDeck', `STATUS display (key ${mappedKeyIndex}) - display only, no action`);
+        log.debug('StreamDeck', `STATUS display (key ${keyIndex}) - display only, no action`);
       }
       return;
     }
 
-    log.debug('StreamDeck', `Unmapped key pressed: ${mappedKeyIndex}`);
+    log.debug('StreamDeck', `Unmapped key pressed: ${keyIndex}`);
   }
 
   _getLayout() {
@@ -387,64 +328,6 @@ class StreamDeckManager extends EventEmitter {
       // 11 and 12 are empty
       special[13] = { type: 'reset', label: 'RESET' };
       controls[14] = { buttonId: BUTTON_PLAY, label: 'START' }; // Will be updated dynamically
-    }
-
-    // If XL device (32 keys), map 15-key layout to XL positions
-    if (this.keyCount === 32) {
-      const xlControls = {};
-      const xlPresets = {};
-      const xlDisplay = {};
-      const xlAdjustments = {};
-      const xlSpecial = {};
-
-      // Map each category from 15-key indices to XL indices
-      for (const [key15Str, value] of Object.entries(controls)) {
-        const key15 = parseInt(key15Str, 10);
-        const xlKey = this._map15KeyToXL(key15);
-        if (xlKey !== -1) {
-          xlControls[xlKey] = value;
-        }
-      }
-
-      for (const [key15Str, value] of Object.entries(presets)) {
-        const key15 = parseInt(key15Str, 10);
-        const xlKey = this._map15KeyToXL(key15);
-        if (xlKey !== -1) {
-          xlPresets[xlKey] = value;
-        }
-      }
-
-      for (const [key15Str, value] of Object.entries(display)) {
-        const key15 = parseInt(key15Str, 10);
-        const xlKey = this._map15KeyToXL(key15);
-        if (xlKey !== -1) {
-          xlDisplay[xlKey] = value;
-        }
-      }
-
-      for (const [key15Str, value] of Object.entries(adjustments)) {
-        const key15 = parseInt(key15Str, 10);
-        const xlKey = this._map15KeyToXL(key15);
-        if (xlKey !== -1) {
-          xlAdjustments[xlKey] = value;
-        }
-      }
-
-      for (const [key15Str, value] of Object.entries(special)) {
-        const key15 = parseInt(key15Str, 10);
-        const xlKey = this._map15KeyToXL(key15);
-        if (xlKey !== -1) {
-          xlSpecial[xlKey] = value;
-        }
-      }
-
-      return {
-        controls: xlControls,
-        presets: xlPresets,
-        display: xlDisplay,
-        adjustments: xlAdjustments,
-        special: xlSpecial
-      };
     }
 
     return { controls, presets, display, adjustments, special };
@@ -553,22 +436,11 @@ class StreamDeckManager extends EventEmitter {
         const mins = Math.floor(time / 60);
         const secs = time % 60;
 
-        // Determine the key indices for minutes and seconds displays
-        // For 15-key: keys 8 and 9
-        // For XL (32-key): need to map from 15-key indices
-        let minsKey = 8;
-        let secsKey = 9;
+        // Button 8: Current minutes
+        await this._fillKeyWithText(8, mins.toString().padStart(2, '0'), stateColor);
 
-        if (this.keyCount === 32) {
-          minsKey = this._map15KeyToXL(8);
-          secsKey = this._map15KeyToXL(9);
-        }
-
-        // Button for minutes
-        await this._fillKeyWithText(minsKey, mins.toString().padStart(2, '0'), stateColor);
-
-        // Button for seconds
-        await this._fillKeyWithText(secsKey, secs.toString().padStart(2, '0'), stateColor);
+        // Button 9: Current seconds
+        await this._fillKeyWithText(9, secs.toString().padStart(2, '0'), stateColor);
       }
     } catch (err) {
       log.debug('StreamDeck', `Timer display update error: ${err.message}`);
@@ -628,17 +500,8 @@ class StreamDeckManager extends EventEmitter {
 
       // Display buttons
       if (this.keyCount >= 15) {
-        // Determine the key indices for minutes and seconds displays
-        let minsKey = 8;
-        let secsKey = 9;
-
-        if (this.keyCount === 32) {
-          minsKey = this._map15KeyToXL(8);
-          secsKey = this._map15KeyToXL(9);
-        }
-
-        await this._fillKeyWithText(minsKey, '--', COLOR_GRAY);
-        await this._fillKeyWithText(secsKey, '--', COLOR_GRAY);
+        await this._fillKeyWithText(8, '--', COLOR_GRAY);
+        await this._fillKeyWithText(9, '--', COLOR_GRAY);
       }
 
       log.info('StreamDeck', 'Initial colors and labels set successfully');
@@ -665,8 +528,8 @@ class StreamDeckManager extends EventEmitter {
     try {
       // Create a simple SVG with text
       const svg = `
-        <svg width="${this.iconSize}" height="${this.iconSize}">
-          <rect width="${this.iconSize}" height="${this.iconSize}" fill="rgb(${r},${g},${b})"/>
+        <svg width="${ICON_SIZE}" height="${ICON_SIZE}">
+          <rect width="${ICON_SIZE}" height="${ICON_SIZE}" fill="rgb(${r},${g},${b})"/>
           <text
             x="50%"
             y="50%"
@@ -682,7 +545,7 @@ class StreamDeckManager extends EventEmitter {
 
       // Convert SVG to raw RGBA buffer
       const imageBuffer = await sharp(Buffer.from(svg))
-        .resize(this.iconSize, this.iconSize)
+        .resize(ICON_SIZE, ICON_SIZE)
         .raw()
         .toBuffer();
 

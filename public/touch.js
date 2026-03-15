@@ -3,85 +3,11 @@
 // --- State ---
 let timerState = { time: 0, flags: 0 };
 let onqConnected = false;
-let isXLLayout = false;  // Track if using XL (32-key) layout
 
 // --- Init ---
 fetchStatus();
 connectSSE();
 setInterval(fetchStatus, 10000); // fallback poll
-initFullscreen();
-
-// --- Fullscreen Handling ---
-
-function initFullscreen() {
-  const btn = document.getElementById('fullscreen-btn');
-
-  // Check if Fullscreen API is available
-  const isFullscreenAvailable =
-    document.fullscreenEnabled ||
-    document.webkitFullscreenEnabled ||
-    document.mozFullScreenEnabled ||
-    document.msFullscreenEnabled;
-
-  if (!isFullscreenAvailable) {
-    btn.style.display = 'none';
-    return;
-  }
-
-  btn.addEventListener('click', toggleFullscreen);
-
-  // Listen for fullscreen changes to update button text
-  document.addEventListener('fullscreenchange', updateFullscreenButton);
-  document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
-  document.addEventListener('mozfullscreenchange', updateFullscreenButton);
-  document.addEventListener('msfullscreenchange', updateFullscreenButton);
-}
-
-function toggleFullscreen() {
-  const elem = document.documentElement;
-
-  if (!isFullscreen()) {
-    // Enter fullscreen
-    if (elem.requestFullscreen) {
-      elem.requestFullscreen();
-    } else if (elem.webkitRequestFullscreen) {
-      elem.webkitRequestFullscreen();
-    } else if (elem.mozRequestFullScreen) {
-      elem.mozRequestFullScreen();
-    } else if (elem.msRequestFullscreen) {
-      elem.msRequestFullscreen();
-    }
-  } else {
-    // Exit fullscreen
-    if (document.exitFullscreen) {
-      document.exitFullscreen();
-    } else if (document.webkitExitFullscreen) {
-      document.webkitExitFullscreen();
-    } else if (document.mozCancelFullScreen) {
-      document.mozCancelFullScreen();
-    } else if (document.msExitFullscreen) {
-      document.msExitFullscreen();
-    }
-  }
-}
-
-function isFullscreen() {
-  return !!(
-    document.fullscreenElement ||
-    document.webkitFullscreenElement ||
-    document.mozFullScreenElement ||
-    document.msFullscreenElement
-  );
-}
-
-function updateFullscreenButton() {
-  const btn = document.getElementById('fullscreen-btn');
-  if (isFullscreen()) {
-    btn.textContent = 'Exit Fullscreen';
-  } else {
-    btn.textContent = 'Fullscreen';
-  }
-}
 
 // --- API calls ---
 
@@ -221,17 +147,8 @@ function getTimerColorClass() {
 function renderGrid(layout) {
   const container = document.getElementById('sd-grid');
 
-  // Use provided layout or create default layout
+  // Use provided layout or create default 15-key layout
   const keys = layout ? layout.keys : createDefaultLayout();
-
-  // Apply XL class if we have 32 keys
-  if (keys.length === 32) {
-    container.classList.add('xl');
-    isXLLayout = true;
-  } else {
-    container.classList.remove('xl');
-    isXLLayout = false;
-  }
 
   container.innerHTML = '';
 
@@ -298,59 +215,4 @@ function createDefaultLayout() {
     { index: 13, type: 'reset', label: 'RESET' },
     { index: 14, type: 'control', label: 'START' },
   ];
-}
-
-function createDefaultXLLayout() {
-  // Default 32-key XL layout (8x4 grid)
-  // The 15-key layout is mapped to bottom-right corner
-  // XL key indices for mapped region:
-  // Row 1 (8-15): [empty] [empty] [empty] [+5s] [+10s] [1:00] [2:00] [5:00]
-  // Row 2 (16-23): [empty] [empty] [empty] [-5s] [-10s] [LAST] [MINS] [SECS]
-  // Row 3 (24-31): [empty] [empty] [empty] [STATUS] [empty] [empty] [RESET] [START/PAUSE/RESUME]
-
-  const layout = [];
-
-  // Create empty keys for all 32 positions
-  for (let i = 0; i < 32; i++) {
-    layout.push({ index: i, type: 'empty', label: '' });
-  }
-
-  // Map the 15-key layout to bottom-right corner
-  // Original key -> XL key mapping: xlIndex = (originalRow + 1) * 8 + (originalCol + 3)
-  const mappings = [
-    // Row 0 (original 0-4) -> XL row 1, cols 3-7 (XL indices 11-15)
-    { xl: 11, type: 'adjustment', label: '+5s' },
-    { xl: 12, type: 'adjustment', label: '+10s' },
-    { xl: 13, type: 'preset', label: '1:00', seconds: 60 },
-    { xl: 14, type: 'preset', label: '2:00', seconds: 120 },
-    { xl: 15, type: 'preset', label: '5:00', seconds: 300 },
-
-    // Row 1 (original 5-9) -> XL row 2, cols 3-7 (XL indices 19-23)
-    { xl: 19, type: 'adjustment', label: '-5s' },
-    { xl: 20, type: 'adjustment', label: '-10s' },
-    { xl: 21, type: 'lastPreset', label: 'LAST' },
-    { xl: 22, type: 'display', label: 'MINS' },
-    { xl: 23, type: 'display', label: 'SECS' },
-
-    // Row 2 (original 10-14) -> XL row 3, cols 3-7 (XL indices 27-31)
-    { xl: 27, type: 'status', label: 'STATUS' },
-    { xl: 28, type: 'empty', label: '' },
-    { xl: 29, type: 'empty', label: '' },
-    { xl: 30, type: 'reset', label: 'RESET' },
-    { xl: 31, type: 'control', label: 'START' },
-  ];
-
-  // Apply the mappings
-  mappings.forEach(mapping => {
-    layout[mapping.xl] = {
-      index: mapping.xl,
-      type: mapping.type,
-      label: mapping.label
-    };
-    if (mapping.seconds !== undefined) {
-      layout[mapping.xl].seconds = mapping.seconds;
-    }
-  });
-
-  return layout;
 }
