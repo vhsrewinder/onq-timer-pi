@@ -30,8 +30,9 @@ const COLOR_CYAN = [0, 150, 150];
 const COLOR_PURPLE = [150, 0, 150];
 const COLOR_ORANGE = [220, 120, 0];
 
-// Stream Deck original button size
-const ICON_SIZE = 72;
+// Stream Deck button sizes
+const ICON_SIZE_ORIGINAL = 72;
+const ICON_SIZE_XL = 96;
 
 class StreamDeckManager extends EventEmitter {
   constructor() {
@@ -42,6 +43,7 @@ class StreamDeckManager extends EventEmitter {
     this.model = null;
     this.keyCount = 0;
     this.cols = 5;
+    this.iconSize = ICON_SIZE_ORIGINAL; // Will be set based on device
     this.remoteId = 249; // Numeric remote ID for Stream Deck (must be <= 255)
     this.lastFlags = 0;
     this.currentTime = 0; // Track current timer time for adjustments
@@ -148,6 +150,8 @@ class StreamDeckManager extends EventEmitter {
       this.currentDevicePath = devicePath;
       this.connected = true;
       this.model = this.device.MODEL;
+      // Set icon size based on device model
+      this.iconSize = (this.model === 'xl') ? ICON_SIZE_XL : ICON_SIZE_ORIGINAL;
       this.keyCount = this.device.NUM_KEYS || this.device.KEY_COUNT || 15;
       this.cols = this.device.KEY_COLUMNS || this.device.ICON_SIZE || 5;
 
@@ -528,8 +532,8 @@ class StreamDeckManager extends EventEmitter {
     try {
       // Create a simple SVG with text
       const svg = `
-        <svg width="${ICON_SIZE}" height="${ICON_SIZE}">
-          <rect width="${ICON_SIZE}" height="${ICON_SIZE}" fill="rgb(${r},${g},${b})"/>
+        <svg width="${this.iconSize}" height="${this.iconSize}">
+          <rect width="${this.iconSize}" height="${this.iconSize}" fill="rgb(${r},${g},${b})"/>
           <text
             x="50%"
             y="50%"
@@ -545,7 +549,7 @@ class StreamDeckManager extends EventEmitter {
 
       // Convert SVG to raw RGBA buffer
       const imageBuffer = await sharp(Buffer.from(svg))
-        .resize(ICON_SIZE, ICON_SIZE)
+        .resize(this.iconSize, this.iconSize)
         .raw()
         .toBuffer();
 
