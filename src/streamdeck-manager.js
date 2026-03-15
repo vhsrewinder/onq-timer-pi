@@ -54,6 +54,39 @@ class StreamDeckManager extends EventEmitter {
     this.currentDevicePath = null; // Track current device path for reconnection detection
   }
 
+
+  // Translate logical key index (0-14) to physical XL index for bottom-right mapping
+  _translateKeyIndex(logicalIndex) {
+    if (this.model !== 'xl' || logicalIndex >= 15) {
+      return logicalIndex; // No translation for non-XL or out of range
+    }
+
+    // Map 5x3 layout to bottom-right of 8x4 XL grid
+    // Logical: row 0-2, col 0-4 -> XL: row 1-3, col 3-7
+    const row = Math.floor(logicalIndex / 5);
+    const col = logicalIndex % 5;
+    const physicalIndex = (row + 1) * 8 + (col + 3);
+    return physicalIndex;
+  }
+
+  // Reverse translate: physical XL index to logical index (0-14)
+  _reverseTranslateKeyIndex(physicalIndex) {
+    if (this.model !== 'xl') {
+      return physicalIndex;
+    }
+
+    // Check if physical index is in our mapped region
+    const xlRow = Math.floor(physicalIndex / 8);
+    const xlCol = physicalIndex % 8;
+
+    // Must be in rows 1-3 and cols 3-7
+    if (xlRow >= 1 && xlRow <= 3 && xlCol >= 3 && xlCol <= 7) {
+      return (xlRow - 1) * 5 + (xlCol - 3);
+    }
+
+    return -1; // Not in mapped region
+  }
+
   async start() {
     try {
       const sdk = await import('@elgato-stream-deck/node');
@@ -172,7 +205,11 @@ class StreamDeckManager extends EventEmitter {
 
         log.info('StreamDeck', `Extracted keyIndex: ${keyIndex}`);
         if (keyIndex !== undefined) {
-          this._handleKeyDown(keyIndex);
+          // Reverse-translate physical XL index to logical index
+          const logicalIndex = this._reverseTranslateKeyIndex(keyIndex);
+          if (logicalIndex >= 0) {
+            this._handleKeyDown(logicalIndex);
+          }
         }
       });
 
@@ -517,7 +554,8 @@ class StreamDeckManager extends EventEmitter {
   _fillKey(keyIndex, [r, g, b]) {
     if (!this.device || keyIndex >= this.keyCount) return;
     try {
-      this.device.fillKeyColor(keyIndex, r, g, b);
+      const physicalIndex = this._translateKeyIndex(keyIndex);
+      this.device.fillKeyColor(physicalIndex, r, g, b);
     } catch (err) {
       log.debug('StreamDeck', `fillKeyColor error for key ${keyIndex}: ${err.message}`);
       if (this.connected) {
@@ -554,7 +592,8 @@ class StreamDeckManager extends EventEmitter {
         .toBuffer();
 
       // Send to Stream Deck
-      await this.device.fillKeyBuffer(keyIndex, imageBuffer, { format: 'rgba' });
+      const physicalIndex = this._translateKeyIndex(keyIndex);
+      await this.device.fillKeyBuffer(physicalIndex, imageBuffer, { format: 'rgba' });
     } catch (err) {
       log.debug('StreamDeck', `fillKeyWithText error for key ${keyIndex}: ${err.message}`);
       // Fallback to solid color if text rendering fails
