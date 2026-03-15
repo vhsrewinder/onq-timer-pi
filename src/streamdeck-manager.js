@@ -30,8 +30,6 @@ const COLOR_CYAN = [0, 150, 150];
 const COLOR_PURPLE = [150, 0, 150];
 const COLOR_ORANGE = [220, 120, 0];
 
-// Stream Deck original button size
-const ICON_SIZE = 72;
 
 class StreamDeckManager extends EventEmitter {
   constructor() {
@@ -42,6 +40,7 @@ class StreamDeckManager extends EventEmitter {
     this.model = null;
     this.keyCount = 0;
     this.cols = 5;
+    this.iconSize = 72; // Default for Stream Deck Original
     this.remoteId = 249; // Numeric remote ID for Stream Deck (must be <= 255)
     this.lastFlags = 0;
     this.currentTime = 0; // Track current timer time for adjustments
@@ -156,6 +155,7 @@ class StreamDeckManager extends EventEmitter {
         log.info('StreamDeck', `XL model detected but keyCount is 15, overriding to 32`);
         this.keyCount = 32;
         this.cols = 8;
+        this.iconSize = 96; // XL uses 96x96 icons
       }
 
       log.info('StreamDeck', `Connected: ${this.model} (${this.keyCount} keys, ${this.cols} cols)`);
@@ -665,8 +665,8 @@ class StreamDeckManager extends EventEmitter {
     try {
       // Create a simple SVG with text
       const svg = `
-        <svg width="${ICON_SIZE}" height="${ICON_SIZE}">
-          <rect width="${ICON_SIZE}" height="${ICON_SIZE}" fill="rgb(${r},${g},${b})"/>
+        <svg width="${this.iconSize}" height="${this.iconSize}">
+          <rect width="${this.iconSize}" height="${this.iconSize}" fill="rgb(${r},${g},${b})"/>
           <text
             x="50%"
             y="50%"
@@ -682,7 +682,7 @@ class StreamDeckManager extends EventEmitter {
 
       // Convert SVG to raw RGBA buffer
       const imageBuffer = await sharp(Buffer.from(svg))
-        .resize(ICON_SIZE, ICON_SIZE)
+        .resize(this.iconSize, this.iconSize)
         .raw()
         .toBuffer();
 
