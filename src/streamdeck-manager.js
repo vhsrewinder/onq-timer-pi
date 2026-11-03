@@ -30,8 +30,9 @@ const COLOR_CYAN = [0, 150, 150];
 const COLOR_PURPLE = [150, 0, 150];
 const COLOR_ORANGE = [220, 120, 0];
 
-// Stream Deck original button size
-const ICON_SIZE = 72;
+// Stream Deck button sizes
+const ICON_SIZE_ORIGINAL = 72;
+const ICON_SIZE_XL = 96;
 
 class StreamDeckManager extends EventEmitter {
   constructor() {
@@ -42,6 +43,7 @@ class StreamDeckManager extends EventEmitter {
     this.model = null;
     this.keyCount = 0;
     this.cols = 5;
+    this.iconSize = ICON_SIZE_ORIGINAL; // Will be set based on device
     this.remoteId = 249; // Numeric remote ID for Stream Deck (must be <= 255)
     this.lastFlags = 0;
     this.currentTime = 0; // Track current timer time for adjustments
@@ -50,6 +52,39 @@ class StreamDeckManager extends EventEmitter {
     this._listStreamDecks = null;
     this._openStreamDeck = null;
     this.currentDevicePath = null; // Track current device path for reconnection detection
+  }
+
+
+  // Translate logical key index (0-14) to physical XL index for bottom-right mapping
+  _translateKeyIndex(logicalIndex) {
+    if (this.model !== 'xl' || logicalIndex >= 15) {
+      return logicalIndex; // No translation for non-XL or out of range
+    }
+
+    // Map 5x3 layout to bottom-right of 8x4 XL grid
+    // Logical: row 0-2, col 0-4 -> XL: row 1-3, col 3-7
+    const row = Math.floor(logicalIndex / 5);
+    const col = logicalIndex % 5;
+    const physicalIndex = (row + 1) * 8 + (col + 3);
+    return physicalIndex;
+  }
+
+  // Reverse translate: physical XL index to logical index (0-14)
+  _reverseTranslateKeyIndex(physicalIndex) {
+    if (this.model !== 'xl') {
+      return physicalIndex;
+    }
+
+    // Check if physical index is in our mapped region
+    const xlRow = Math.floor(physicalIndex / 8);
+    const xlCol = physicalIndex % 8;
+
+    // Must be in rows 1-3 and cols 3-7
+    if (xlRow >= 1 && xlRow <= 3 && xlCol >= 3 && xlCol <= 7) {
+      return (xlRow - 1) * 5 + (xlCol - 3);
+    }
+
+    return -1; // Not in mapped region
   }
 
   async start() {
@@ -148,6 +183,8 @@ class StreamDeckManager extends EventEmitter {
       this.currentDevicePath = devicePath;
       this.connected = true;
       this.model = this.device.MODEL;
+      // Set icon size based on device model
+      this.iconSize = (this.model === 'xl') ? ICON_SIZE_XL : ICON_SIZE_ORIGINAL;
       this.keyCount = this.device.NUM_KEYS || this.device.KEY_COUNT || 15;
       this.cols = this.device.KEY_COLUMNS || this.device.ICON_SIZE || 5;
 
@@ -168,7 +205,11 @@ class StreamDeckManager extends EventEmitter {
 
         log.info('StreamDeck', `Extracted keyIndex: ${keyIndex}`);
         if (keyIndex !== undefined) {
-          this._handleKeyDown(keyIndex);
+          // Reverse-translate physical XL index to logical index
+          const logicalIndex = this._reverseTranslateKeyIndex(keyIndex);
+          if (logicalIndex >= 0) {
+            this._handleKeyDown(logicalIndex);
+          }
         }
       });
 
@@ -513,7 +554,8 @@ class StreamDeckManager extends EventEmitter {
   _fillKey(keyIndex, [r, g, b]) {
     if (!this.device || keyIndex >= this.keyCount) return;
     try {
-      this.device.fillKeyColor(keyIndex, r, g, b);
+      const physicalIndex = this._translateKeyIndex(keyIndex);
+      this.device.fillKeyColor(physicalIndex, r, g, b);
     } catch (err) {
       log.debug('StreamDeck', `fillKeyColor error for key ${keyIndex}: ${err.message}`);
       if (this.connected) {
@@ -528,8 +570,8 @@ class StreamDeckManager extends EventEmitter {
     try {
       // Create a simple SVG with text
       const svg = `
-        <svg width="${ICON_SIZE}" height="${ICON_SIZE}">
-          <rect width="${ICON_SIZE}" height="${ICON_SIZE}" fill="rgb(${r},${g},${b})"/>
+        <svg width="${this.iconSize}" height="${this.iconSize}">
+          <rect width="${this.iconSize}" height="${this.iconSize}" fill="rgb(${r},${g},${b})"/>
           <text
             x="50%"
             y="50%"
@@ -545,12 +587,13 @@ class StreamDeckManager extends EventEmitter {
 
       // Convert SVG to raw RGBA buffer
       const imageBuffer = await sharp(Buffer.from(svg))
-        .resize(ICON_SIZE, ICON_SIZE)
+        .resize(this.iconSize, this.iconSize)
         .raw()
         .toBuffer();
 
       // Send to Stream Deck
-      await this.device.fillKeyBuffer(keyIndex, imageBuffer, { format: 'rgba' });
+      const physicalIndex = this._translateKeyIndex(keyIndex);
+      await this.device.fillKeyBuffer(physicalIndex, imageBuffer, { format: 'rgba' });
     } catch (err) {
       log.debug('StreamDeck', `fillKeyWithText error for key ${keyIndex}: ${err.message}`);
       // Fallback to solid color if text rendering fails
