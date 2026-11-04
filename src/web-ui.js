@@ -164,7 +164,7 @@ class WebUI {
           case 'preset':
           case 'lastPreset':
             if (seconds !== undefined) {
-              await this.onqClient.postSetTime(remoteId, seconds);
+              await this.onqClient.postPreset(remoteId, seconds);
             }
             break;
           case 'adjustment':
