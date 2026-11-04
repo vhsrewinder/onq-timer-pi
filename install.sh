@@ -87,7 +87,7 @@ echo "Installing systemd service..."
 cp /opt/onq-timer-pi/systemd/onq-timer-pi.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable onq-timer-pi
-systemctl start onq-timer-pi
+systemctl restart onq-timer-pi
 
 echo ""
 echo "=== Installation Complete ==="
