@@ -14,7 +14,7 @@ setInterval(fetchStatus, 10000); // fallback poll
 
 async function fetchStatus() {
   try {
-    const res = await fetch('/api/status');
+    const res = await fetch('api/status');
     status = await res.json();
     renderStatus();
   } catch { /* ignore */ }
@@ -22,7 +22,7 @@ async function fetchStatus() {
 
 async function fetchConfig() {
   try {
-    const res = await fetch('/api/config');
+    const res = await fetch('api/config');
     const cfg = await res.json();
     document.getElementById('server-host').placeholder = cfg.onqServer.host;
     document.getElementById('server-port').placeholder = cfg.onqServer.port;
@@ -41,7 +41,7 @@ async function saveServer() {
   if (!host && !port) return;
 
   try {
-    await fetch('/api/config', {
+    await fetch('api/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(update),
@@ -57,7 +57,7 @@ async function saveServer() {
 
 async function loadLogs() {
   try {
-    const res = await fetch('/api/logs');
+    const res = await fetch('api/logs');
     const text = await res.text();
     const box = document.getElementById('log-box');
     box.textContent = text;
@@ -68,7 +68,7 @@ async function loadLogs() {
 async function restartService() {
   if (!confirm('Restart the relay service?')) return;
   try {
-    await fetch('/api/restart', { method: 'POST' });
+    await fetch('api/restart', { method: 'POST' });
   } catch { /* expected — service restarts */ }
   setTimeout(() => location.reload(), 3000);
 }
@@ -82,7 +82,7 @@ async function controlTimer(action) {
     statusEl.textContent = 'Sending command...';
     statusEl.style.color = '#888';
 
-    const res = await fetch('/api/timer/control', {
+    const res = await fetch('api/timer/control', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action }),
@@ -110,7 +110,7 @@ async function controlTimer(action) {
 
 async function simulateStreamDeckPress(key) {
   try {
-    const res = await fetch('/api/streamdeck/simulate', {
+    const res = await fetch('api/streamdeck/simulate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -180,7 +180,7 @@ function renderEventLog() {
 // --- SSE ---
 
 function connectSSE() {
-  const es = new EventSource('/api/events');
+  const es = new EventSource('api/events');
   es.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);

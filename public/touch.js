@@ -86,7 +86,7 @@ function updateFullscreenButton() {
 
 async function fetchStatus() {
   try {
-    const res = await fetch('/api/status');
+    const res = await fetch('api/status');
     const status = await res.json();
 
     onqConnected = status.onq.connected;
@@ -108,7 +108,7 @@ async function fetchStatus() {
 
 async function simulateButtonPress(buttonData) {
   try {
-    const res = await fetch('/api/streamdeck/simulate', {
+    const res = await fetch('api/streamdeck/simulate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buttonData),
@@ -126,7 +126,7 @@ async function simulateButtonPress(buttonData) {
 // --- SSE ---
 
 function connectSSE() {
-  const es = new EventSource('/api/events');
+  const es = new EventSource('api/events');
   es.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);
