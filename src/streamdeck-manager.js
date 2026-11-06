@@ -46,7 +46,7 @@ class StreamDeckManager extends EventEmitter {
     this.iconSize = ICON_SIZE_ORIGINAL; // Will be set based on device
     this.remoteId = 249; // Numeric remote ID for Stream Deck (must be <= 255)
     this.lastFlags = 0;
-    this.currentTime = 0; // Track current timer time for adjustments
+    this.currentTime = 0; // Track current timer time (the LAST key captures it on reset)
     this.lastResetTime = 0; // Track time at moment of reset for LAST preset
     this.currentControlButtonId = BUTTON_PLAY; // Track current control button action
     this._listStreamDecks = null;
@@ -289,11 +289,15 @@ class StreamDeckManager extends EventEmitter {
     // Check adjustment buttons
     const adjustAction = layout.adjustments[keyIndex];
     if (adjustAction) {
-      const newTime = Math.max(0, this.currentTime + adjustAction.adjust);
-      log.info('StreamDeck', `Adjustment: ${adjustAction.label} (key ${keyIndex}, ${this.currentTime}s → ${newTime}s)`);
-      this.emit('set-time', {
+      // Send the CHANGE, not a new total. This used to compute
+      // currentTime + adjust and send it as a preset, which OnQ refuses while
+      // the timer runs (409 timer_running) — so +/- did nothing mid-speech, and
+      // when paused it overwrote the preset. OnQ decides what a relative change
+      // means in each timer state (lib/timer-adjust.ts in queue-master).
+      log.info('StreamDeck', `Adjustment: ${adjustAction.label} (key ${keyIndex}, delta ${adjustAction.adjust}s)`);
+      this.emit('adjust-time', {
         remoteId: this.remoteId,
-        seconds: newTime,
+        delta: adjustAction.adjust,
       });
       return;
     }
@@ -377,7 +381,7 @@ class StreamDeckManager extends EventEmitter {
   async updateTimerDisplay(time, flags) {
     if (!this.connected || !this.device) return;
     this.lastFlags = flags;
-    this.currentTime = time; // Track current time for adjustments
+    this.currentTime = time; // Track current time for the LAST key
 
     // Determine state
     const isRunning = (flags & FLAG_RUNNING) !== 0;

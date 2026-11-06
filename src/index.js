@@ -42,6 +42,11 @@ streamDeckManager.on('set-time', (data) => {
   onqClient.postPreset(data.remoteId, data.seconds);
 });
 
+// Wire: Stream Deck +/- seconds → OnQ HTTP POST (relative; works while running)
+streamDeckManager.on('adjust-time', (data) => {
+  onqClient.postAdjust(data.remoteId, data.delta);
+});
+
 // Wire: device count changes → OnQ heartbeat
 serialManager.on('device-added', () => {
   onqClient.setConnectedDeviceCount(serialManager.getDevices().length);

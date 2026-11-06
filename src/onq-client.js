@@ -134,6 +134,36 @@ class OnqClient extends EventEmitter {
     }
   }
 
+  /**
+   * Add or take seconds off the timer (Stream Deck +/- keys).
+   * Needs OnQ with POST /api/bridge/adjust (queue-master, 2026-11-06).
+   */
+  async postAdjust(remoteId, delta) {
+    const url = `${this._getBaseUrl()}/api/bridge/adjust`;
+    const body = {
+      remoteId,
+      delta,
+      gatewayId: this.gatewayId,
+      timestamp: Date.now(),
+    };
+
+    try {
+      // No retry: a delta is not idempotent. If the first request landed and
+      // only its reply was lost, a retry would add the seconds twice.
+      const res = await this._postWithRetry(url, body, 0);
+      if (res.ok) {
+        this.stats.adjustmentsSent = (this.stats.adjustmentsSent || 0) + 1;
+        log.info('OnqClient', `Adjust sent: remote=${remoteId} delta=${delta}`);
+      } else {
+        const text = await res.text();
+        log.warn('OnqClient', `Adjust rejected (${res.status}): ${text}`);
+      }
+    } catch (err) {
+      this.stats.httpErrors++;
+      log.error('OnqClient', `Adjust failed: ${err.message}`);
+    }
+  }
+
   async _postWithRetry(url, body, retries = 1) {
     try {
       return await fetch(url, {
